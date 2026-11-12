@@ -1,0 +1,204 @@
+import asyncio
+import hashlib
+import hmac
+import logging
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+from app.config import settings
+from app.database import get_db, AsyncSessionLocal
+from app.models import Contact, Conversation, Message, Direction, MessageType, MessageStatus
+from app.services.media import download_media
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/webhook", tags=["webhook"])
+
+
+# ---------------------------------------------------------------------------
+# Verificação de assinatura
+# ---------------------------------------------------------------------------
+
+def _verify_signature(body: bytes, signature_header: str | None) -> None:
+    if not signature_header or not signature_header.startswith("sha256="):
+        raise HTTPException(status_code=403, detail="Missing signature")
+    expected = hmac.new(
+        settings.whatsapp_app_secret.encode(),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature_header[7:]):
+        raise HTTPException(status_code=403, detail="Invalid signature")
+
+
+# ---------------------------------------------------------------------------
+# GET — verificação do webhook pela Meta
+# ---------------------------------------------------------------------------
+
+@router.get("")
+async def verify_webhook(
+    hub_mode: str = Query(alias="hub.mode"),
+    hub_verify_token: str = Query(alias="hub.verify_token"),
+    hub_challenge: str = Query(alias="hub.challenge"),
+):
+    if hub_mode != "subscribe" or hub_verify_token != settings.whatsapp_verify_token:
+        raise HTTPException(status_code=403, detail="Verification failed")
+    return int(hub_challenge)
+
+
+# ---------------------------------------------------------------------------
+# POST — eventos da Meta (mensagens, status, erros)
+# ---------------------------------------------------------------------------
+
+@router.post("")
+async def receive_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    body = await request.body()
+    _verify_signature(body, request.headers.get("X-Hub-Signature-256"))
+
+    payload: dict[str, Any] = await request.json()
+    background_tasks.add_task(_process_payload, payload, db)
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Processamento em background
+# ---------------------------------------------------------------------------
+
+async def _process_payload(payload: dict, db: AsyncSession) -> None:
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            await _handle_messages(value.get("messages", []), value.get("contacts", []), db)
+            await _handle_statuses(value.get("statuses", []), db)
+
+
+async def _handle_messages(
+    messages: list[dict], contacts: list[dict], db: AsyncSession
+) -> None:
+    contact_names = {c["wa_id"]: c.get("profile", {}).get("name") for c in contacts}
+
+    for msg in messages:
+        phone = msg["from"]
+        wa_id = msg["id"]
+
+        # Idempotência: ignorar duplicados
+        existing = await db.scalar(select(Message).where(Message.wa_message_id == wa_id))
+        if existing:
+            continue
+
+        contact = await _get_or_create_contact(db, phone, contact_names.get(phone))
+        conversation = await _get_or_create_conversation(db, contact.id)
+
+        # Actualiza janela de 24h
+        from datetime import datetime
+        conversation.last_client_message_at = datetime.utcnow()
+
+        msg_type = _resolve_type(msg.get("type", "text"))
+        content = _extract_content(msg)
+        mime_type = _extract_mime(msg)
+
+        message = Message(
+            conversation_id=conversation.id,
+            wa_message_id=wa_id,
+            direction=Direction.inbound,
+            type=msg_type,
+            content=content,
+            status=MessageStatus.received,
+        )
+        db.add(message)
+        await db.commit()
+        await db.refresh(message)
+        logger.info("Mensagem recebida: %s de %s", wa_id, phone)
+
+        # Dispara download assíncrono para tipos de média
+        if msg_type != MessageType.text and content and mime_type:
+            asyncio.create_task(_download_and_store(message.id, content, mime_type, db))
+
+
+async def _handle_statuses(statuses: list[dict], db: AsyncSession) -> None:
+    status_map = {
+        "sent": MessageStatus.sent,
+        "delivered": MessageStatus.delivered,
+        "read": MessageStatus.read,
+        "failed": MessageStatus.failed,
+    }
+    for status_obj in statuses:
+        wa_id = status_obj["id"]
+        new_status = status_map.get(status_obj.get("status"))
+        if not new_status:
+            continue
+        message = await db.scalar(select(Message).where(Message.wa_message_id == wa_id))
+        if message and message.advance_status(new_status):
+            await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+async def _get_or_create_contact(db: AsyncSession, phone: str, name: str | None) -> Contact:
+    contact = await db.scalar(select(Contact).where(Contact.phone == phone))
+    if not contact:
+        contact = Contact(phone=phone, name=name)
+        db.add(contact)
+        await db.flush()
+    elif name and not contact.name:
+        contact.name = name
+    return contact
+
+
+async def _get_or_create_conversation(db: AsyncSession, contact_id: int) -> Conversation:
+    conv = await db.scalar(
+        select(Conversation).where(Conversation.contact_id == contact_id)
+    )
+    if not conv:
+        conv = Conversation(contact_id=contact_id)
+        db.add(conv)
+        await db.flush()
+    return conv
+
+
+def _resolve_type(raw: str) -> MessageType:
+    try:
+        return MessageType[raw]
+    except KeyError:
+        return MessageType.text
+
+
+def _extract_content(msg: dict) -> str | None:
+    t = msg.get("type", "text")
+    if t == "text":
+        return msg.get("text", {}).get("body")
+    if t == "audio":
+        return msg.get("audio", {}).get("id")
+    if t == "image":
+        return msg.get("image", {}).get("id")
+    if t == "document":
+        return msg.get("document", {}).get("id")
+    return None
+
+
+def _extract_mime(msg: dict) -> str | None:
+    t = msg.get("type", "text")
+    block = msg.get(t, {})
+    return block.get("mime_type")
+
+
+async def _download_and_store(message_id: int, media_id: str, mime_type: str, _db: AsyncSession) -> None:
+    """Baixa a mídia e actualiza o campo media_path na mensagem."""
+    try:
+        relative_path = await download_media(media_id, mime_type)
+        async with AsyncSessionLocal() as session:
+            msg = await session.get(Message, message_id)
+            if msg:
+                msg.media_path = relative_path
+                await session.commit()
+                logger.info("media_path actualizado: %s", relative_path)
+    except Exception as exc:
+        logger.error("Erro ao baixar média %s: %s", media_id, exc)
