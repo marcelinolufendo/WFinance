@@ -9,3 +9,4 @@ python-multipart==0.0.18
 websockets==14.1
 pydantic-settings==2.6.1
 aiofiles==24.1.0
+anthropic==1.52.0
