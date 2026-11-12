@@ -18,6 +18,7 @@ export interface Message {
   direction: "inbound" | "outbound";
   type: "text" | "audio" | "image" | "video" | "document";
   content: string | null;
+  media_path: string | null;
   status: "received" | "sent" | "delivered" | "read" | "failed";
   created_at: string;
 }

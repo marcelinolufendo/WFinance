@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -8,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, AsyncSessionLocal
 from app.models import Contact, Conversation, Message, Direction, MessageType, MessageStatus
+from app.services.media import download_media
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhook", tags=["webhook"])
@@ -99,6 +101,7 @@ async def _handle_messages(
 
         msg_type = _resolve_type(msg.get("type", "text"))
         content = _extract_content(msg)
+        mime_type = _extract_mime(msg)
 
         message = Message(
             conversation_id=conversation.id,
@@ -112,6 +115,10 @@ async def _handle_messages(
         await db.commit()
         await db.refresh(message)
         logger.info("Mensagem recebida: %s de %s", wa_id, phone)
+
+        # Dispara download assíncrono para tipos de média
+        if msg_type != MessageType.text and content and mime_type:
+            asyncio.create_task(_download_and_store(message.id, content, mime_type, db))
 
 
 async def _handle_statuses(statuses: list[dict], db: AsyncSession) -> None:
@@ -175,3 +182,23 @@ def _extract_content(msg: dict) -> str | None:
     if t == "document":
         return msg.get("document", {}).get("id")
     return None
+
+
+def _extract_mime(msg: dict) -> str | None:
+    t = msg.get("type", "text")
+    block = msg.get(t, {})
+    return block.get("mime_type")
+
+
+async def _download_and_store(message_id: int, media_id: str, mime_type: str, _db: AsyncSession) -> None:
+    """Baixa a mídia e actualiza o campo media_path na mensagem."""
+    try:
+        relative_path = await download_media(media_id, mime_type)
+        async with AsyncSessionLocal() as session:
+            msg = await session.get(Message, message_id)
+            if msg:
+                msg.media_path = relative_path
+                await session.commit()
+                logger.info("media_path actualizado: %s", relative_path)
+    except Exception as exc:
+        logger.error("Erro ao baixar média %s: %s", media_id, exc)
