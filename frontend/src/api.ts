@@ -26,6 +26,16 @@ export async function sendMessage(conversationId: number, text: string): Promise
   }
 }
 
+export async function suggestReply(conversationId: number): Promise<string> {
+  const r = await fetch(`${BASE}/conversations/${conversationId}/suggest`, { method: "POST" });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Erro ao gerar sugestão");
+  }
+  const data = await r.json();
+  return data.suggestion as string;
+}
+
 export function openWebSocket(conversationId: number, onMessage: (msg: Message) => void): WebSocket {
   const ws = new WebSocket(`/ws/${conversationId}`);
   ws.onmessage = (e) => {

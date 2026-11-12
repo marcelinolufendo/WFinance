@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     whatsapp_app_secret: str
     whatsapp_verify_token: str
     media_storage_path: str = "./media"
+    anthropic_api_key: str
 
     class Config:
         env_file = ".env"

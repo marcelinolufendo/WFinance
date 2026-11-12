@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Conversation, Message } from "../types";
-import { fetchMessages, sendMessage, openWebSocket } from "../api";
+import { fetchMessages, sendMessage, openWebSocket, suggestReply } from "../api";
 import { MediaMessage } from "./MediaMessage";
 
 interface Props {
@@ -19,6 +19,8 @@ export function ChatWindow({ conversation }: Props) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function ChatWindow({ conversation }: Props) {
     if (!text.trim()) return;
     setError(null);
     setSending(true);
+    setSuggestion(null);
     try {
       await sendMessage(conversation.id, text.trim());
       setText("");
@@ -50,6 +53,27 @@ export function ChatWindow({ conversation }: Props) {
       setError(e instanceof Error ? e.message : "Erro desconhecido");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleSuggest() {
+    setSuggestion(null);
+    setError(null);
+    setSuggesting(true);
+    try {
+      const s = await suggestReply(conversation.id);
+      setSuggestion(s);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erro ao gerar sugestão");
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function useSuggestion() {
+    if (suggestion) {
+      setText(suggestion);
+      setSuggestion(null);
     }
   }
 
@@ -87,9 +111,47 @@ export function ChatWindow({ conversation }: Props) {
         <div ref={bottomRef} />
       </div>
 
+      {/* Suggestion card */}
+      {suggestion && (
+        <div className="mx-3 mb-1 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm">
+          <p className="text-xs text-blue-500 font-semibold mb-1 flex items-center gap-1">
+            ✦ Sugestão do assistente
+          </p>
+          <p className="text-gray-800 leading-snug">{suggestion}</p>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={useSuggestion}
+              className="bg-blue-500 text-white text-xs px-3 py-1 rounded-full hover:bg-blue-600"
+            >
+              Usar
+            </button>
+            <button
+              onClick={() => { setText(suggestion); setSuggestion(null); }}
+              className="border border-blue-300 text-blue-600 text-xs px-3 py-1 rounded-full hover:bg-blue-100"
+            >
+              Editar
+            </button>
+            <button
+              onClick={() => setSuggestion(null)}
+              className="text-gray-400 text-xs px-2 py-1 hover:text-gray-600"
+            >
+              Descartar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       {error && <p className="px-4 py-1 text-xs text-red-600 bg-red-50">{error}</p>}
       <div className="p-3 border-t flex gap-2">
+        <button
+          onClick={handleSuggest}
+          disabled={!conversation.window_open || suggesting}
+          title="Sugerir resposta com IA"
+          className="text-blue-500 border border-blue-300 px-3 py-2 rounded-full text-sm disabled:opacity-40 hover:bg-blue-50 flex items-center gap-1 shrink-0"
+        >
+          {suggesting ? "…" : "✦ Sugerir"}
+        </button>
         <input
           className="flex-1 border rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
           placeholder={conversation.window_open ? "Escreve uma mensagem..." : "Janela encerrada — use um template"}
