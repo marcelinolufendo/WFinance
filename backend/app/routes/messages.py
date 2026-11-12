@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Conversation, Message, Direction, MessageType, MessageStatus
+from app.models.contact import Contact
 from app.services import whatsapp
 
 router = APIRouter(prefix="/conversations", tags=["messages"])
@@ -12,6 +14,31 @@ router = APIRouter(prefix="/conversations", tags=["messages"])
 
 class SendTextRequest(BaseModel):
     text: str
+
+
+@router.get("")
+async def list_conversations(db: AsyncSession = Depends(get_db)):
+    rows = await db.scalars(
+        select(Conversation)
+        .options(selectinload(Conversation.contact))
+        .order_by(Conversation.updated_at.desc())
+    )
+    convs = rows.all()
+    return [
+        {
+            "id": c.id,
+            "contact": {
+                "id": c.contact.id,
+                "name": c.contact.name,
+                "phone": c.contact.phone,
+            },
+            "window_open": c.window_open,
+            "controlled_by": c.controlled_by.value,
+            "last_client_message_at": c.last_client_message_at.isoformat() if c.last_client_message_at else None,
+            "updated_at": c.updated_at.isoformat(),
+        }
+        for c in convs
+    ]
 
 
 @router.post("/{conversation_id}/messages")
