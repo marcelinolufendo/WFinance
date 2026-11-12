@@ -45,7 +45,8 @@ async def verify_webhook(
 ):
     if hub_mode != "subscribe" or hub_verify_token != settings.whatsapp_verify_token:
         raise HTTPException(status_code=403, detail="Verification failed")
-    return int(hub_challenge)
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=hub_challenge)
 
 
 # ---------------------------------------------------------------------------
