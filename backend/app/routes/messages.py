@@ -70,6 +70,7 @@ async def list_messages(
             "direction": m.direction.value,
             "type": m.type.value,
             "content": m.content,
+            "media_path": m.media_path,
             "status": m.status.value,
             "created_at": m.created_at.isoformat(),
         }

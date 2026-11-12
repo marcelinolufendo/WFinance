@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Conversation, Message } from "../types";
 import { fetchMessages, sendMessage, openWebSocket } from "../api";
+import { MediaMessage } from "./MediaMessage";
 
 interface Props {
   conversation: Conversation;
@@ -73,7 +74,7 @@ export function ChatWindow({ conversation }: Props) {
               {m.type === "text" ? (
                 <p>{m.content}</p>
               ) : (
-                <p className="italic text-opacity-80">[{m.type}]</p>
+                <MediaMessage type={m.type} mediaPath={m.media_path} content={m.content} />
               )}
               {m.direction === "outbound" && (
                 <span className={`text-[10px] ml-1 ${m.status === "read" ? "text-blue-200" : "text-green-200"}`}>
