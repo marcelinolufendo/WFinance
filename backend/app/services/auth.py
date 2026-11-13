@@ -9,11 +9,11 @@ EXPIRE_MINUTES = 60 * 24 * 7  # 7 dias
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(password.encode()[:72].decode("utf-8", errors="ignore"))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(plain.encode()[:72].decode("utf-8", errors="ignore"), hashed)
 
 
 def create_token(username: str) -> str:
