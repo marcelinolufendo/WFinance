@@ -37,6 +37,12 @@ async def _run_migrations(conn) -> None:
         "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_language VARCHAR(20) DEFAULT 'pt_BR'",
         "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS sent_count INTEGER DEFAULT 0",
         "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS target_segment VARCHAR(50)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS deposit_percent INTEGER",
+        "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS contact_name VARCHAR(200)",
+        "ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(50)",
+        # PostgreSQL enum: adicionar novos valores com tratamento de duplicados
+        "DO $$ BEGIN ALTER TYPE orderstatus ADD VALUE IF NOT EXISTS 'awaiting_deposit'; EXCEPTION WHEN duplicate_object THEN null; END $$",
+        "DO $$ BEGIN ALTER TYPE orderstatus ADD VALUE IF NOT EXISTS 'completed'; EXCEPTION WHEN duplicate_object THEN null; END $$",
     ]
     for sql in migrations:
         await conn.execute(text(sql))

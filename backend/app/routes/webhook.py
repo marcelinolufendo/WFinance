@@ -142,6 +142,10 @@ async def _handle_messages(
                 conversation.controlled_by.value == "bot",
             ))
 
+        # Verificar confirmação de recebimento de entrega
+        if msg_type == MessageType.text and content:
+            asyncio.create_task(_check_delivery_confirmation(contact.id, content, conversation.id))
+
         # Bot de resposta automática (apenas mensagens de texto)
         if msg_type == MessageType.text and conversation.controlled_by.value == "bot":
             asyncio.create_task(_bot_auto_reply(conversation.id, contact.id))
@@ -292,11 +296,93 @@ async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
                         notes="Criada automaticamente pelo bot",
                     )
                     session.add(order)
+                    await session.flush()
+                    # Guardar dados de entrega se o bot os recolheu
+                    delivery_data = result.get("delivery") or {}
+                    if delivery_data.get("address") or delivery_data.get("contact_name"):
+                        from app.models.orders import Delivery, DeliveryStatus
+                        d = Delivery(
+                            order_id=order.id,
+                            address=delivery_data.get("address"),
+                            contact_name=delivery_data.get("contact_name"),
+                            contact_phone=delivery_data.get("contact_phone"),
+                            status=DeliveryStatus.pending,
+                        )
+                        session.add(d)
 
             await session.commit()
 
     except Exception as exc:
         logger.error("Erro no bot auto-reply: %s", exc)
+
+
+_CONFIRM_KEYWORDS = {
+    "recebi", "confirmado", "confirmei", "sim", "ok", "entregue",
+    "chegou", "recebido", "tá bom", "ta bom", "perfeito", "obrigado",
+    "obrigada", "chegou sim", "recebi sim", "já recebi",
+}
+
+async def _check_delivery_confirmation(contact_id: int, text: str, conversation_id: int) -> None:
+    """Se o cliente confirmar o recebimento, conclui a encomenda e envia a fatura."""
+    normalized = text.strip().lower()
+    if not any(kw in normalized for kw in _CONFIRM_KEYWORDS):
+        return
+
+    try:
+        async with AsyncSessionLocal() as session:
+            from app.models.orders import Order, OrderStatus
+            from sqlalchemy.orm import selectinload
+
+            pending = await session.scalar(
+                select(Order)
+                .where(Order.contact_id == contact_id, Order.status == OrderStatus.delivered)
+                .options(selectinload(Order.contact))
+                .order_by(Order.created_at.desc())
+            )
+            if not pending:
+                return
+
+            pending.status = OrderStatus.completed
+            await session.commit()
+            logger.info("Encomenda #%d concluída por confirmação do cliente", pending.id)
+
+            # Enviar fatura via WhatsApp
+            contact = pending.contact
+            if contact and contact.phone:
+                items = pending.items or []
+                lines = [f"🧾 *FACTURA #{pending.id}*"]
+                if contact.name:
+                    lines.append(f"Cliente: {contact.name}")
+                lines.append(f"Data: {pending.created_at.strftime('%d/%m/%Y')}")
+                lines.append("")
+                lines.append("*Artigos:*")
+                for item in items:
+                    name = item.get("name", "")
+                    qty = item.get("quantity", 1)
+                    price = float(item.get("unit_price", 0))
+                    lines.append(f"  • {name} x{qty} — {price * qty:,.0f} AOA")
+                lines.append("")
+                total = float(pending.total_amount) if pending.total_amount else sum(
+                    float(i.get("unit_price", 0)) * float(i.get("quantity", 1)) for i in items
+                )
+                lines.append(f"*TOTAL: {total:,.0f} AOA*")
+                lines.append(f"Pagamento: {pending.payment_method.value}")
+                lines.append("")
+                lines.append("✅ Obrigado pela tua compra! Esperamos vê-lo em breve. 😊")
+
+                from app.services.whatsapp import send_text
+                await send_text(contact.phone, "\n".join(lines))
+
+                # Notificar agentes via WebSocket
+                from app.websocket.manager import manager
+                await manager.broadcast_global({
+                    "type": "order_completed",
+                    "order_id": pending.id,
+                    "contact_id": contact_id,
+                    "conversation_id": conversation_id,
+                })
+    except Exception as exc:
+        logger.error("Erro ao verificar confirmação de entrega: %s", exc)
 
 
 async def _download_and_store(

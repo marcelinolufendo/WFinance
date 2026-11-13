@@ -8,9 +8,11 @@ from app.database import Base
 class OrderStatus(PyEnum):
     draft = "draft"
     confirmed = "confirmed"
+    awaiting_deposit = "awaiting_deposit"
     preparing = "preparing"
     delivering = "delivering"
     delivered = "delivered"
+    completed = "completed"
     cancelled = "cancelled"
 
 
@@ -71,6 +73,8 @@ class Delivery(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), unique=True, index=True)
     status: Mapped[DeliveryStatus] = mapped_column(Enum(DeliveryStatus), default=DeliveryStatus.pending)
     address: Mapped[str | None] = mapped_column(Text)
+    contact_name: Mapped[str | None] = mapped_column(String(200))
+    contact_phone: Mapped[str | None] = mapped_column(String(50))
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime)
     driver_name: Mapped[str | None] = mapped_column(String(200))

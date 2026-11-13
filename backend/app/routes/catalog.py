@@ -19,6 +19,7 @@ class ProductIn(BaseModel):
     price: Optional[float] = None
     stock: Optional[int] = None
     stock_min: Optional[int] = None
+    deposit_percent: Optional[int] = None
     status: ProductStatus = ProductStatus.active
 
 
@@ -231,6 +232,7 @@ def _product_dict(p: Product) -> dict:
         "price": float(p.price) if p.price is not None else None,
         "stock": p.stock,
         "stock_min": p.stock_min,
+        "deposit_percent": p.deposit_percent,
         "status": p.status.value,
         "created_at": p.created_at.isoformat(),
         "updated_at": p.updated_at.isoformat(),

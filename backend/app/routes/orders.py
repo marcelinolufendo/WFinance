@@ -33,6 +33,8 @@ class OrderIn(BaseModel):
 
 class DeliveryIn(BaseModel):
     address: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_phone: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     driver_name: Optional[str] = None
     notes: Optional[str] = None
@@ -114,10 +116,10 @@ async def update_order(order_id: int, body: OrderIn, db: AsyncSession = Depends(
 
 
 _STATUS_MSGS = {
-    "confirmed": "✅ A tua encomenda #{id} foi *confirmada*! Em breve estará em preparação.",
+    "confirmed": "✅ A tua encomenda #{id} foi *confirmada*! Em breve entraremos em contacto para agendar a entrega.",
+    "awaiting_deposit": "💳 A tua encomenda #{id} aguarda o pagamento do depósito inicial. Por favor efectua o pagamento para avançarmos com a preparação.",
     "preparing": "👨‍🍳 A tua encomenda #{id} está a ser *preparada*.",
     "delivering": "🚚 A tua encomenda #{id} está *a caminho*! O nosso estafeta está a dirigir-se até ti.",
-    "delivered": "🎉 A tua encomenda #{id} foi *entregue* com sucesso! Obrigado pela tua preferência. 🙏",
     "cancelled": "❌ A tua encomenda #{id} foi *cancelada*. Contacta-nos para mais informações.",
 }
 
@@ -136,11 +138,23 @@ async def update_order_status(order_id: int, status: OrderStatus, db: AsyncSessi
     await db.refresh(o)
 
     # Notificação automática via WhatsApp
-    if o.contact and o.contact.phone and status.value in _STATUS_MSGS:
+    if o.contact and o.contact.phone:
         import asyncio
         from app.services.whatsapp import send_text
-        msg = _STATUS_MSGS[status.value].replace("{id}", str(o.id))
-        asyncio.create_task(send_text(o.contact.phone, msg))
+        if status == OrderStatus.delivered:
+            total = float(o.total_amount) if o.total_amount else 0
+            paid_partial = o.payment_status == PaymentStatus.partial
+            remaining = total / 2 if paid_partial else total
+            paid_label = f" (já pagou {total/2:,.0f} AOA)" if paid_partial else ""
+            msg = (
+                f"🎉 A tua encomenda *#{o.id}* foi entregue!{paid_label}\n\n"
+                f"Valor a pagar: *{remaining:,.0f} AOA*\n\n"
+                f"Por favor confirma o recebimento respondendo *'Recebi'*. Obrigado! 🙏"
+            )
+            asyncio.create_task(send_text(o.contact.phone, msg))
+        elif status.value in _STATUS_MSGS:
+            msg = _STATUS_MSGS[status.value].replace("{id}", str(o.id))
+            asyncio.create_task(send_text(o.contact.phone, msg))
 
     return _order_dict(o)
 
@@ -255,6 +269,8 @@ def _delivery_dict(d: Delivery) -> dict:
         "order_id": d.order_id,
         "status": d.status.value,
         "address": d.address,
+        "contact_name": d.contact_name,
+        "contact_phone": d.contact_phone,
         "scheduled_at": d.scheduled_at.isoformat() if d.scheduled_at else None,
         "delivered_at": d.delivered_at.isoformat() if d.delivered_at else None,
         "driver_name": d.driver_name,

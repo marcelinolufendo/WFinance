@@ -3,15 +3,18 @@ import type { Order, OrderPayload, Customer, Product, Service } from "../types";
 import { fetchOrders, createOrder, updateOrder, deleteOrder, fetchCustomers, fetchProducts, fetchServices, updateOrderReturn, exportInvoicePdf, sendInvoiceWhatsApp } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
-  draft: "Rascunho", confirmed: "Confirmada", preparing: "Em preparação",
-  delivering: "Em entrega", delivered: "Entregue", cancelled: "Cancelada",
+  draft: "Rascunho", confirmed: "Confirmada", awaiting_deposit: "Aguarda depósito",
+  preparing: "Em preparação", delivering: "Em entrega", delivered: "Entregue",
+  completed: "Concluída", cancelled: "Cancelada",
 };
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600", confirmed: "bg-blue-100 text-blue-700",
+  awaiting_deposit: "bg-purple-100 text-purple-700",
   preparing: "bg-yellow-100 text-yellow-700", delivering: "bg-orange-100 text-orange-700",
-  delivered: "bg-green-100 text-green-700", cancelled: "bg-red-100 text-red-600",
+  delivered: "bg-teal-100 text-teal-700", completed: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-600",
 };
-const STATUSES = ["draft", "confirmed", "preparing", "delivering", "delivered", "cancelled"];
+const STATUSES = ["draft", "confirmed", "awaiting_deposit", "preparing", "delivering", "delivered", "completed", "cancelled"];
 
 type ItemForm = { name: string; quantity: number; unit_price: number; product_id: number | null };
 
@@ -139,6 +142,12 @@ export function OrdersPage() {
                 {o.items.slice(0, 3).map((item, i) => (
                   <span key={i} className="text-xs text-gray-400 mr-2">{item.quantity}× {item.name}</span>
                 ))}
+                {o.delivery?.address && (
+                  <p className="text-xs text-gray-400 mt-1">📍 {o.delivery.address}{o.delivery.contact_name ? ` · ${o.delivery.contact_name}` : ""}{o.delivery.contact_phone ? ` (${o.delivery.contact_phone})` : ""}</p>
+                )}
+                {o.delivery?.scheduled_at && (
+                  <p className="text-xs text-blue-500 mt-0.5">🗓 {new Date(o.delivery.scheduled_at).toLocaleString("pt-AO")}</p>
+                )}
                 {o.notes && <p className="text-xs text-gray-400 mt-1 italic">{o.notes}</p>}
                 <p className="text-xs text-gray-300 mt-1">{new Date(o.created_at).toLocaleDateString("pt-AO")}</p>
               </div>

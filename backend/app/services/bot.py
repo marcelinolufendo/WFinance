@@ -190,9 +190,11 @@ async def _run_consultar_pedidos(contact_id: int, estado: str, db: AsyncSession)
     STATUS_PT = {
         "draft": "rascunho",
         "confirmed": "confirmada",
+        "awaiting_deposit": "aguarda depósito",
         "preparing": "em preparação",
         "delivering": "a caminho / em entrega",
-        "delivered": "entregue",
+        "delivered": "entregue — aguarda confirmação",
+        "completed": "concluída",
         "cancelled": "cancelada",
     }
 
@@ -241,8 +243,15 @@ Tom: {tone_desc}.
 - Quando o cliente perguntar sobre encomendas ou pedidos, usa SEMPRE a ferramenta consultar_pedidos — nunca peças o nome ou número de encomenda ao cliente.
 
 ## Quando o cliente quer fazer uma encomenda
-Se o cliente confirmar que quer encomendar algo, responde com JSON puro (sem markdown, sem ```):
-{{"reply": "mensagem para o cliente", "action": "create_order", "items": [{{"name": "...", "quantity": 1, "unit_price": 0}}]}}
+1. Confirma os artigos e preços com o cliente.
+2. Pede a *morada de entrega* (rua, bairro, município).
+3. Pede o *nome da pessoa que vai receber* (pode ser diferente do cliente).
+4. Pede um *número de telefone de contacto* para o estafeta.
+5. Só depois de teres TODOS estes dados, responde com JSON puro (sem markdown, sem ```):
+{{"reply": "mensagem para o cliente", "action": "create_order", "items": [{{"name": "...", "quantity": 1, "unit_price": 0}}], "delivery": {{"address": "...", "contact_name": "...", "contact_phone": "..."}}}}
+
+## Produtos com depósito antecipado
+Alguns produtos requerem pagamento de uma percentagem antes da entrega (indicado no catálogo como "depósito X%"). Quando um cliente encomendar esses produtos, informa-o do valor do depósito e que a encomenda só avança após o pagamento.
 
 Para qualquer outra resposta, envia apenas o texto simples, sem JSON."""
 
@@ -266,8 +275,9 @@ async def _products_text(db: AsyncSession) -> str:
         for p in products:
             stock = f"(stock: {p.stock})" if p.stock is not None else "(stock não definido)"
             price = f"{p.price:,.0f} AOA" if p.price else "preço a consultar"
+            deposit = f" [depósito {p.deposit_percent}%]" if p.deposit_percent else ""
             desc = f" — {p.description}" if p.description else ""
-            lines.append(f"- {p.name}: {price} {stock}{desc}")
+            lines.append(f"- {p.name}: {price} {stock}{deposit}{desc}")
 
     if services:
         lines.append("**Serviços:**")

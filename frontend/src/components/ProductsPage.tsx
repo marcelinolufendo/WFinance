@@ -8,6 +8,7 @@ const EMPTY: Omit<Product, "id" | "created_at" | "updated_at"> = {
   price: null,
   stock: null,
   stock_min: null,
+  deposit_percent: null,
   status: "active",
 };
 
@@ -29,7 +30,7 @@ export function ProductsPage() {
   }
 
   function openEdit(p: Product) {
-    setForm({ name: p.name, description: p.description ?? "", price: p.price, stock: p.stock, stock_min: p.stock_min, status: p.status });
+    setForm({ name: p.name, description: p.description ?? "", price: p.price, stock: p.stock, stock_min: p.stock_min, deposit_percent: p.deposit_percent, status: p.status });
     setModal({ open: true, editing: p });
   }
 
@@ -121,6 +122,9 @@ export function ProductsPage() {
                 </Field>
                 <Field label="Stock mínimo">
                   <input type="number" className="input" value={form.stock_min ?? ""} onChange={(e) => setForm({ ...form, stock_min: e.target.value ? +e.target.value : null })} placeholder="Alerta abaixo deste valor" />
+                </Field>
+                <Field label="Depósito antecipado (%)">
+                  <input type="number" min={0} max={100} className="input" value={form.deposit_percent ?? ""} onChange={(e) => setForm({ ...form, deposit_percent: e.target.value ? +e.target.value : null })} placeholder="Ex: 50 (opcional)" />
                 </Field>
               </div>
               <Field label="Estado">

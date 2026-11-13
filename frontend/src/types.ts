@@ -5,6 +5,7 @@ export interface Product {
   price: number | null;
   stock: number | null;
   stock_min: number | null;
+  deposit_percent: number | null;
   status: "active" | "inactive";
   created_at: string;
   updated_at: string;
@@ -59,7 +60,7 @@ export interface Order {
   id: number;
   contact: { id: number; name: string | null; phone: string } | null;
   conversation_id: number | null;
-  status: "draft" | "confirmed" | "preparing" | "delivering" | "delivered" | "cancelled";
+  status: "draft" | "confirmed" | "awaiting_deposit" | "preparing" | "delivering" | "delivered" | "completed" | "cancelled";
   payment_method: "cash" | "transfer" | "mobile_money" | "pending";
   payment_status: "unpaid" | "partial" | "paid";
   items: OrderItem[];
@@ -105,6 +106,8 @@ export interface Delivery {
   order_id: number;
   status: "pending" | "on_way" | "delivered" | "failed";
   address: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
   scheduled_at: string | null;
   delivered_at: string | null;
   driver_name: string | null;
