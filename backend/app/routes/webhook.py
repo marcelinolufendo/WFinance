@@ -121,6 +121,10 @@ async def _handle_messages(
         if msg_type != MessageType.text and content and mime_type:
             asyncio.create_task(_download_and_store(message.id, content, mime_type, db))
 
+        # Bot de resposta automática (apenas mensagens de texto)
+        if msg_type == MessageType.text and conversation.controlled_by.value == "bot":
+            asyncio.create_task(_bot_auto_reply(conversation.id, contact.id, db))
+
 
 async def _handle_statuses(statuses: list[dict], db: AsyncSession) -> None:
     status_map = {
@@ -189,6 +193,71 @@ def _extract_mime(msg: dict) -> str | None:
     t = msg.get("type", "text")
     block = msg.get(t, {})
     return block.get("mime_type")
+
+
+async def _bot_auto_reply(conversation_id: int, contact_id: int, _db: AsyncSession) -> None:
+    """Chama o bot e envia a resposta automática via WhatsApp."""
+    from app.database import AsyncSessionLocal
+    from app.services.bot import bot_reply, get_bot_config
+    from app.services.whatsapp import send_text
+    from app.models import Order, OrderStatus, PaymentMethod, PaymentStatus, Contact
+
+    try:
+        async with AsyncSessionLocal() as session:
+            msgs = (await session.scalars(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.created_at)
+            )).all()
+
+            history = [
+                {"direction": m.direction.value, "type": m.type.value, "content": m.content}
+                for m in msgs
+            ]
+
+            result = await bot_reply(conversation_id, history, session)
+            if not result:
+                return
+
+            reply_text = result["reply"]
+            contact = await session.get(Contact, contact_id)
+            if not contact:
+                return
+
+            wa_resp = await send_text(contact.phone, reply_text)
+            wa_msg_id = wa_resp.get("messages", [{}])[0].get("id")
+
+            out_msg = Message(
+                conversation_id=conversation_id,
+                wa_message_id=wa_msg_id or f"bot_{conversation_id}_{len(msgs)}",
+                direction=Direction.outbound,
+                type=MessageType.text,
+                content=reply_text,
+                status=MessageStatus.sent,
+            )
+            session.add(out_msg)
+
+            if result.get("action") == "create_order" and result.get("items"):
+                config = await get_bot_config(session)
+                if config and config.auto_create_order:
+                    items = result["items"]
+                    total = sum(i.get("unit_price", 0) * i.get("quantity", 1) for i in items)
+                    order = Order(
+                        contact_id=contact_id,
+                        conversation_id=conversation_id,
+                        status=OrderStatus.draft,
+                        payment_method=PaymentMethod.pending,
+                        payment_status=PaymentStatus.unpaid,
+                        items=items,
+                        total_amount=total,
+                        notes="Criada automaticamente pelo bot",
+                    )
+                    session.add(order)
+
+            await session.commit()
+
+    except Exception as exc:
+        logger.error("Erro no bot auto-reply: %s", exc)
 
 
 async def _download_and_store(message_id: int, media_id: str, mime_type: str, _db: AsyncSession) -> None:

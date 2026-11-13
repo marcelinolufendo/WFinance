@@ -104,6 +104,26 @@ export interface Customer {
   created_at: string;
 }
 
+export interface BotConfig {
+  enabled: boolean;
+  model: string;
+  openrouter_api_key: string | null;
+  tone: string;
+  store_name: string;
+  extra_instructions: string | null;
+  auto_create_order: boolean;
+}
+
+export interface KnowledgeEntry {
+  id: number;
+  title: string;
+  content: string;
+  category: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Contact {
   id: number;
   phone: string;

@@ -3,6 +3,7 @@ from app.models.conversation import Conversation, ControlledBy
 from app.models.message import Message, Direction, MessageType, MessageStatus
 from app.models.catalog import Product, Service, Campaign, ProductStatus, CampaignStatus
 from app.models.orders import Order, Delivery, OrderStatus, PaymentMethod, PaymentStatus, DeliveryStatus
+from app.models.knowledge import KnowledgeBase, BotConfig, KnowledgeCategory
 
 __all__ = [
     "Contact",
@@ -24,4 +25,7 @@ __all__ = [
     "PaymentMethod",
     "PaymentStatus",
     "DeliveryStatus",
+    "KnowledgeBase",
+    "BotConfig",
+    "KnowledgeCategory",
 ]

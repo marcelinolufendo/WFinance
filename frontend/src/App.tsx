@@ -10,10 +10,11 @@ import { CustomersPage } from "./components/CustomersPage";
 import { ProductsPage } from "./components/ProductsPage";
 import { ServicesPage } from "./components/ServicesPage";
 import { CampaignsPage } from "./components/CampaignsPage";
+import { BotPage } from "./components/BotPage";
 
-type Section = "dashboard" | "chat" | "orders" | "deliveries" | "customers" | "products" | "services" | "campaigns";
+type Section = "dashboard" | "chat" | "orders" | "deliveries" | "customers" | "products" | "services" | "campaigns" | "bot";
 
-const NAV: { key: Section; label: string; icon: string; group?: string }[] = [
+const NAV: { key: Section; label: string; icon: string }[] = [
   { key: "dashboard", label: "Dashboard", icon: "📊" },
   { key: "chat", label: "Conversas", icon: "💬" },
   { key: "orders", label: "Encomendas", icon: "🛒" },
@@ -22,6 +23,7 @@ const NAV: { key: Section; label: string; icon: string; group?: string }[] = [
   { key: "products", label: "Produtos", icon: "📦" },
   { key: "services", label: "Serviços", icon: "🛠️" },
   { key: "campaigns", label: "Campanhas", icon: "📢" },
+  { key: "bot", label: "Bot IA", icon: "🤖" },
 ];
 
 export default function App() {
@@ -81,6 +83,7 @@ export default function App() {
           {section === "products" && <ProductsPage />}
           {section === "services" && <ServicesPage />}
           {section === "campaigns" && <CampaignsPage />}
+          {section === "bot" && <BotPage />}
         </main>
       )}
     </div>

@@ -1,4 +1,4 @@
-import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, OrderPayload, Delivery, Customer } from "./types";
+import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, OrderPayload, Delivery, Customer, BotConfig, KnowledgeEntry } from "./types";
 
 const BASE = "/api";
 
@@ -172,6 +172,44 @@ export async function updateCampaign(id: number, data: Omit<Campaign, "id" | "cr
 
 export async function deleteCampaign(id: number): Promise<void> {
   await fetch(`${BASE}/campaigns/${id}`, { method: "DELETE" });
+}
+
+// ── Bot Config ────────────────────────────────────────────────────────────────
+
+export async function fetchBotConfig(): Promise<BotConfig> {
+  const r = await fetch(`${BASE}/bot/config`);
+  if (!r.ok) throw new Error("Erro ao carregar config do bot");
+  return r.json();
+}
+
+export async function saveBotConfig(data: BotConfig): Promise<BotConfig> {
+  const r = await fetch(`${BASE}/bot/config`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao guardar config do bot");
+  return r.json();
+}
+
+// ── Knowledge Base ────────────────────────────────────────────────────────────
+
+export async function fetchKnowledge(): Promise<KnowledgeEntry[]> {
+  const r = await fetch(`${BASE}/knowledge-base`);
+  if (!r.ok) throw new Error("Erro ao carregar knowledge base");
+  return r.json();
+}
+
+export async function createKnowledge(data: Omit<KnowledgeEntry, "id" | "created_at" | "updated_at">): Promise<KnowledgeEntry> {
+  const r = await fetch(`${BASE}/knowledge-base`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao criar entrada");
+  return r.json();
+}
+
+export async function updateKnowledge(id: number, data: Omit<KnowledgeEntry, "id" | "created_at" | "updated_at">): Promise<KnowledgeEntry> {
+  const r = await fetch(`${BASE}/knowledge-base/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao actualizar entrada");
+  return r.json();
+}
+
+export async function deleteKnowledge(id: number): Promise<void> {
+  await fetch(`${BASE}/knowledge-base/${id}`, { method: "DELETE" });
 }
 
 export function openWebSocket(conversationId: number, onMessage: (msg: Message) => void): WebSocket {

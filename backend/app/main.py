@@ -4,13 +4,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routes import webhook, messages, ws, media, suggest, catalog, orders, customers, dashboard
+from app.routes import webhook, messages, ws, media, suggest, catalog, orders, customers, dashboard, knowledge
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    from app.database import AsyncSessionLocal
+    from app.seeds import run_seeds
+    async with AsyncSessionLocal() as session:
+        await run_seeds(session)
     yield
 
 
@@ -33,6 +37,7 @@ app.include_router(catalog.router)
 app.include_router(orders.router)
 app.include_router(customers.router)
 app.include_router(dashboard.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/health")

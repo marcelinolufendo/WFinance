@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Conversation, Message } from "../types";
-import { fetchMessages, sendMessage, openWebSocket, suggestReply } from "../api";
+import type { Conversation, Message, OrderPayload } from "../types";
+import { fetchMessages, sendMessage, openWebSocket, suggestReply, createOrder } from "../api";
 import { MediaMessage } from "./MediaMessage";
 
 interface Props {
@@ -21,6 +21,10 @@ export function ChatWindow({ conversation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [orderModal, setOrderModal] = useState(false);
+  const [orderItems, setOrderItems] = useState([{ name: "", quantity: 1, unit_price: 0 }]);
+  const [orderNotes, setOrderNotes] = useState("");
+  const [orderSaving, setOrderSaving] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,6 +74,26 @@ export function ChatWindow({ conversation }: Props) {
     }
   }
 
+  async function handleCreateOrder() {
+    setOrderSaving(true);
+    try {
+      const payload: OrderPayload = {
+        contact_id: conversation.contact.id,
+        conversation_id: conversation.id,
+        status: "draft",
+        payment_method: "pending",
+        payment_status: "unpaid",
+        items: orderItems.filter(i => i.name.trim()),
+        total_amount: orderItems.reduce((s, i) => s + i.quantity * i.unit_price, 0) || null,
+        notes: orderNotes || null,
+      };
+      await createOrder(payload);
+      setOrderModal(false);
+      setOrderItems([{ name: "", quantity: 1, unit_price: 0 }]);
+      setOrderNotes("");
+    } finally { setOrderSaving(false); }
+  }
+
   function useSuggestion() {
     if (suggestion) {
       setText(suggestion);
@@ -85,9 +109,14 @@ export function ChatWindow({ conversation }: Props) {
           <p className="font-semibold">{conversation.contact.name ?? conversation.contact.phone}</p>
           <p className="text-xs text-gray-400">{conversation.contact.phone}</p>
         </div>
-        <span className={`text-xs px-2 py-1 rounded-full ${conversation.window_open ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
-          {conversation.window_open ? "Janela aberta" : "Janela encerrada"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs px-2 py-1 rounded-full ${conversation.window_open ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+            {conversation.window_open ? "Janela aberta" : "Janela encerrada"}
+          </span>
+          <button onClick={() => setOrderModal(true)} className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full hover:bg-amber-200 font-medium">
+            🛒 Encomenda
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -168,6 +197,42 @@ export function ChatWindow({ conversation }: Props) {
           Enviar
         </button>
       </div>
+      {orderModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-lg font-semibold mb-1">Nova encomenda</h2>
+            <p className="text-sm text-gray-400 mb-4">{conversation.contact.name ?? conversation.contact.phone}</p>
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-medium text-gray-600">Artigos</span>
+                  <button onClick={() => setOrderItems([...orderItems, { name: "", quantity: 1, unit_price: 0 }])} className="text-xs text-blue-600 hover:underline">+ Adicionar</button>
+                </div>
+                {orderItems.map((item, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2 mb-2 items-center">
+                    <input className="input text-xs col-span-5" placeholder="Nome do artigo" value={item.name} onChange={e => { const a = [...orderItems]; a[idx] = { ...a[idx], name: e.target.value }; setOrderItems(a); }} />
+                    <input type="number" className="input text-xs col-span-2" placeholder="Qtd" min={1} value={item.quantity} onChange={e => { const a = [...orderItems]; a[idx] = { ...a[idx], quantity: +e.target.value }; setOrderItems(a); }} />
+                    <input type="number" className="input text-xs col-span-4" placeholder="Preço" min={0} value={item.unit_price} onChange={e => { const a = [...orderItems]; a[idx] = { ...a[idx], unit_price: +e.target.value }; setOrderItems(a); }} />
+                    <button className="col-span-1 text-red-400 text-sm" onClick={() => setOrderItems(orderItems.filter((_, i) => i !== idx))} disabled={orderItems.length === 1}>×</button>
+                  </div>
+                ))}
+                <p className="text-right text-sm font-semibold text-gray-700">
+                  Total: {orderItems.reduce((s, i) => s + i.quantity * i.unit_price, 0).toLocaleString("pt-AO")} AOA
+                </p>
+              </div>
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Notas</span>
+                <textarea className="input" rows={2} value={orderNotes} onChange={e => setOrderNotes(e.target.value)} />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setOrderModal(false)} className="px-4 py-2 rounded border text-sm">Cancelar</button>
+              <button onClick={handleCreateOrder} disabled={orderSaving || !orderItems.some(i => i.name.trim())} className="bg-amber-500 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+                {orderSaving ? "A criar…" : "Criar encomenda"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
