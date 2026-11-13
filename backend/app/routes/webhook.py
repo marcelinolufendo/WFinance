@@ -93,7 +93,7 @@ async def _handle_messages(
         if existing:
             continue
 
-        contact = await _get_or_create_contact(db, phone, contact_names.get(phone))
+        contact, is_new_contact = await _get_or_create_contact(db, phone, contact_names.get(phone))
         conversation = await _get_or_create_conversation(db, contact.id)
 
         # Actualiza janela de 24h
@@ -113,6 +113,7 @@ async def _handle_messages(
             status=MessageStatus.received,
         )
         db.add(message)
+        conversation.last_message_preview = (content or "")[:120]
         await db.commit()
         await db.refresh(message)
         logger.info("Mensagem recebida: %s de %s", wa_id, phone)
@@ -126,7 +127,12 @@ async def _handle_messages(
             "controlled_by": conversation.controlled_by.value,
             "preview": (content or "")[:60],
             "direction": "inbound",
+            "last_message_preview": (content or "")[:120],
         })
+
+        # Mensagem de boas-vindas para novo contacto
+        if is_new_contact and conversation.controlled_by.value == "bot":
+            asyncio.create_task(_send_welcome(contact.phone))
 
         # Dispara download assíncrono para tipos de média
         if msg_type != MessageType.text and content and mime_type:
@@ -162,15 +168,16 @@ async def _handle_statuses(statuses: list[dict], db: AsyncSession) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _get_or_create_contact(db: AsyncSession, phone: str, name: str | None) -> Contact:
+async def _get_or_create_contact(db: AsyncSession, phone: str, name: str | None) -> tuple["Contact", bool]:
     contact = await db.scalar(select(Contact).where(Contact.phone == phone))
     if not contact:
         contact = Contact(phone=phone, name=name)
         db.add(contact)
         await db.flush()
-    elif name and not contact.name:
+        return contact, True
+    if name and not contact.name:
         contact.name = name
-    return contact
+    return contact, False
 
 
 async def _get_or_create_conversation(db: AsyncSession, contact_id: int) -> Conversation:
@@ -210,6 +217,20 @@ def _extract_mime(msg: dict) -> str | None:
     return block.get("mime_type")
 
 
+async def _send_welcome(phone: str) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            from app.models.knowledge import BotConfig
+            config = await session.scalar(select(BotConfig).where(BotConfig.id == 1))
+            if not config or not config.enabled:
+                return
+            store = config.store_name or "a nossa loja"
+        from app.services.whatsapp import send_text
+        await send_text(phone, f"Olá! 👋 Bem-vindo(a) a *{store}*! Como posso ajudar-te hoje? 😊")
+    except Exception as exc:
+        logger.error("Erro na mensagem de boas-vindas: %s", exc)
+
+
 async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
     """Chama o bot e envia a resposta automática via WhatsApp."""
     from app.database import AsyncSessionLocal
@@ -230,7 +251,10 @@ async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
                 for m in msgs
             ]
 
+            from app.websocket.manager import manager
+            await manager.broadcast(conversation_id, {"type": "typing", "value": True})
             result = await bot_reply(conversation_id, contact_id, history, session)
+            await manager.broadcast(conversation_id, {"type": "typing", "value": False})
             if not result:
                 return
 

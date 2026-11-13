@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Customer } from "../types";
-import { fetchCustomers, updateCustomer, createCustomer, importCustomersCSV } from "../api";
+import { fetchCustomers, updateCustomer, createCustomer, importCustomersCSV, fetchCustomerHistory, exportCustomersUrl } from "../api";
 
 const SEGMENT_LABELS: Record<string, string> = { regular: "Regular", vip: "VIP", inactive: "Inativo", lead: "Lead" };
 const SEGMENT_COLORS: Record<string, string> = {
@@ -23,6 +23,7 @@ export function CustomersPage() {
   const [createForm, setCreateForm] = useState<CreateForm>({ phone: "", name: "", email: "", address: "", segment: "regular", internal_notes: "" });
   const [loading, setLoading] = useState(false);
   const [importResult, setImportResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [historyModal, setHistoryModal] = useState<{ open: boolean; customer: Customer | null; data: any | null }>({ open: false, customer: null, data: null });
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { load(); }, []);
@@ -55,6 +56,14 @@ export function CustomersPage() {
     } catch (err: any) {
       alert(err.message);
     } finally { setLoading(false); }
+  }
+
+  async function openHistory(c: Customer) {
+    setHistoryModal({ open: true, customer: c, data: null });
+    try {
+      const data = await fetchCustomerHistory(c.id);
+      setHistoryModal(prev => ({ ...prev, data }));
+    } catch {}
   }
 
   async function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
@@ -92,6 +101,7 @@ export function CustomersPage() {
           </select>
           <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCSV} />
           <button onClick={() => csvInputRef.current?.click()} className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50">Importar CSV</button>
+          <a href={exportCustomersUrl()} download className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50">📥 Excel</a>
           <button onClick={() => setCreateModal(true)} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">+ Novo</button>
         </div>
       </div>
@@ -129,7 +139,10 @@ export function CustomersPage() {
               <td className="p-3 border font-medium">{c.total_spent > 0 ? `${c.total_spent.toLocaleString("pt-AO")} AOA` : "—"}</td>
               <td className="p-3 border text-gray-400 text-xs">{new Date(c.created_at).toLocaleDateString("pt-AO")}</td>
               <td className="p-3 border">
-                <button onClick={() => openEdit(c)} className="text-blue-600 hover:underline">Editar</button>
+                <div className="flex gap-2">
+                  <button onClick={() => openEdit(c)} className="text-blue-600 hover:underline text-xs">Editar</button>
+                  <button onClick={() => openHistory(c)} className="text-gray-500 hover:underline text-xs">Histórico</button>
+                </div>
               </td>
             </tr>
           ))}
@@ -169,6 +182,69 @@ export function CustomersPage() {
                 {loading ? "A guardar…" : "Guardar"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {historyModal.open && historyModal.customer && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold">Histórico do cliente</h2>
+                <p className="text-sm text-gray-400">{historyModal.customer.name ?? historyModal.customer.phone}</p>
+              </div>
+              <button onClick={() => setHistoryModal({ open: false, customer: null, data: null })} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            {!historyModal.data ? (
+              <p className="text-sm text-gray-400 text-center py-8">A carregar...</p>
+            ) : (
+              <div className="overflow-y-auto space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Encomendas ({historyModal.data.orders.length})</h3>
+                  {historyModal.data.orders.length === 0 ? (
+                    <p className="text-xs text-gray-400">Sem encomendas</p>
+                  ) : (
+                    <table className="w-full text-xs border-collapse">
+                      <thead><tr className="bg-gray-50"><th className="p-2 border text-left">ID</th><th className="p-2 border text-left">Estado</th><th className="p-2 border text-left">Artigos</th><th className="p-2 border text-right">Total</th><th className="p-2 border text-left">Data</th></tr></thead>
+                      <tbody>
+                        {historyModal.data.orders.map((o: any) => (
+                          <tr key={o.id} className="hover:bg-gray-50">
+                            <td className="p-2 border">#{o.id}</td>
+                            <td className="p-2 border">{o.status}</td>
+                            <td className="p-2 border text-center">{o.items_count}</td>
+                            <td className="p-2 border text-right">{o.total_amount != null ? `${o.total_amount.toLocaleString("pt-AO")} AOA` : "—"}</td>
+                            <td className="p-2 border text-gray-400">{new Date(o.created_at).toLocaleDateString("pt-AO")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Conversas ({historyModal.data.conversations.length})</h3>
+                  {historyModal.data.conversations.length === 0 ? (
+                    <p className="text-xs text-gray-400">Sem conversas</p>
+                  ) : (
+                    <table className="w-full text-xs border-collapse">
+                      <thead><tr className="bg-gray-50"><th className="p-2 border text-left">ID</th><th className="p-2 border text-left">Modo</th><th className="p-2 border text-left">Última mensagem</th><th className="p-2 border text-left">Estado</th><th className="p-2 border text-left">Data</th></tr></thead>
+                      <tbody>
+                        {historyModal.data.conversations.map((cv: any) => (
+                          <tr key={cv.id} className="hover:bg-gray-50">
+                            <td className="p-2 border">#{cv.id}</td>
+                            <td className="p-2 border">{cv.controlled_by === "bot" ? "🤖 Bot" : "👤 Humano"}</td>
+                            <td className="p-2 border text-gray-500 truncate max-w-xs">{cv.last_message_preview ?? "—"}</td>
+                            <td className="p-2 border">{cv.resolved_at ? "✅ Resolvida" : "Aberta"}</td>
+                            <td className="p-2 border text-gray-400">{new Date(cv.created_at).toLocaleDateString("pt-AO")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

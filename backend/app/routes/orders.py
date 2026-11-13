@@ -113,6 +113,15 @@ async def update_order(order_id: int, body: OrderIn, db: AsyncSession = Depends(
     return _order_dict(o)
 
 
+_STATUS_MSGS = {
+    "confirmed": "✅ A tua encomenda #{id} foi *confirmada*! Em breve estará em preparação.",
+    "preparing": "👨‍🍳 A tua encomenda #{id} está a ser *preparada*.",
+    "delivering": "🚚 A tua encomenda #{id} está *a caminho*! O nosso estafeta está a dirigir-se até ti.",
+    "delivered": "🎉 A tua encomenda #{id} foi *entregue* com sucesso! Obrigado pela tua preferência. 🙏",
+    "cancelled": "❌ A tua encomenda #{id} foi *cancelada*. Contacta-nos para mais informações.",
+}
+
+
 @router.patch("/orders/{order_id}/status")
 async def update_order_status(order_id: int, status: OrderStatus, db: AsyncSession = Depends(get_db)):
     o = await db.scalar(
@@ -125,6 +134,14 @@ async def update_order_status(order_id: int, status: OrderStatus, db: AsyncSessi
     o.status = status
     await db.commit()
     await db.refresh(o)
+
+    # Notificação automática via WhatsApp
+    if o.contact and o.contact.phone and status.value in _STATUS_MSGS:
+        import asyncio
+        from app.services.whatsapp import send_text
+        msg = _STATUS_MSGS[status.value].replace("{id}", str(o.id))
+        asyncio.create_task(send_text(o.contact.phone, msg))
+
     return _order_dict(o)
 
 

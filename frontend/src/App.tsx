@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Conversation } from "./types";
-import { fetchConversations, openGlobalWebSocket } from "./api";
+import { fetchConversations, openGlobalWebSocket, getToken, clearToken } from "./api";
 import type { GlobalWsEvent } from "./api";
 import { ConversationList } from "./components/ConversationList";
 import { ChatWindow } from "./components/ChatWindow";
@@ -12,6 +12,7 @@ import { ProductsPage } from "./components/ProductsPage";
 import { ServicesPage } from "./components/ServicesPage";
 import { CampaignsPage } from "./components/CampaignsPage";
 import { BotPage } from "./components/BotPage";
+import { LoginPage } from "./components/LoginPage";
 
 type Section = "dashboard" | "chat" | "orders" | "deliveries" | "customers" | "products" | "services" | "campaigns" | "bot";
 
@@ -45,16 +46,22 @@ function playBeep() {
 }
 
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState(!!getToken());
+  const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [section, setSection] = useState<Section>("dashboard");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [unread, setUnread] = useState<Record<number, number>>({});
+  const [convFilter, setConvFilter] = useState<{ status: string; mode: string }>({ status: "open", mode: "" });
   const selectedIdRef = useRef<number | null>(null);
   selectedIdRef.current = selectedId;
 
   useEffect(() => {
-    fetchConversations().then(setConversations).catch(console.error);
-  }, []);
+    if (!loggedIn) return;
+    fetchConversations(convFilter.status || undefined, convFilter.mode || undefined)
+      .then(setConversations)
+      .catch(console.error);
+  }, [loggedIn, convFilter]);
 
   const handleGlobalEvent = useCallback((evt: GlobalWsEvent) => {
     if (evt.type !== "new_message") return;
@@ -63,12 +70,20 @@ export default function App() {
     setConversations(prev => {
       const existing = prev.find(c => c.id === conversation_id);
       const updated: Conversation = existing
-        ? { ...existing, contact: { ...existing.contact, ...contact }, controlled_by }
+        ? {
+            ...existing,
+            contact: { ...existing.contact, ...contact },
+            controlled_by,
+            last_message_preview: evt.last_message_preview ?? preview ?? null,
+          }
         : {
             id: conversation_id,
             contact: { id: contact.id, phone: contact.phone, name: contact.name },
             controlled_by,
             window_open: true,
+            last_message_preview: evt.last_message_preview ?? preview ?? null,
+            resolved_at: null,
+            internal_notes: null,
             updated_at: new Date().toISOString(),
           };
       const without = prev.filter(c => c.id !== conversation_id);
@@ -79,20 +94,35 @@ export default function App() {
       setUnread(prev => ({ ...prev, [conversation_id]: (prev[conversation_id] ?? 0) + 1 }));
       playBeep();
     }
-
-    // suppress unused warning
-    void preview;
   }, []);
 
   useEffect(() => {
+    if (!loggedIn) return;
     const ws = openGlobalWebSocket(handleGlobalEvent);
     return () => ws.close();
-  }, [handleGlobalEvent]);
+  }, [loggedIn, handleGlobalEvent]);
 
   function selectConversation(id: number) {
     setSelectedId(id);
     setUnread(prev => ({ ...prev, [id]: 0 }));
     if (section !== "chat") setSection("chat");
+  }
+
+  function handleLogin(username: string) {
+    setCurrentUser(username);
+    setLoggedIn(true);
+  }
+
+  function handleLogout() {
+    clearToken();
+    setLoggedIn(false);
+    setCurrentUser(null);
+    setSelectedId(null);
+    setConversations([]);
+  }
+
+  if (!loggedIn) {
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
@@ -123,6 +153,18 @@ export default function App() {
             </button>
           );
         })}
+
+        {/* Logout */}
+        <div className="mt-auto">
+          <button
+            onClick={handleLogout}
+            title={`Sair (${currentUser})`}
+            className="w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+          >
+            <span className="text-lg leading-none">🚪</span>
+            <span className="leading-none" style={{ fontSize: "9px" }}>Sair</span>
+          </button>
+        </div>
       </nav>
 
       {/* Conteúdo */}
@@ -133,10 +175,17 @@ export default function App() {
             selectedId={selectedId}
             onSelect={selectConversation}
             unread={unread}
+            filter={convFilter}
+            onFilterChange={setConvFilter}
           />
           <main className="flex-1 flex flex-col">
             {selected ? (
-              <ChatWindow conversation={selected} />
+              <ChatWindow
+                conversation={selected}
+                onConversationUpdate={(updated) =>
+                  setConversations(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c))
+                }
+              />
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-400">
                 Seleciona uma conversa

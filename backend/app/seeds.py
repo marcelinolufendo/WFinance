@@ -1,12 +1,13 @@
 """
 Seeders iniciais — executa uma vez no arranque se as tabelas estiverem vazias.
-Popula knowledge_base e bot_config com dados de exemplo.
+Popula knowledge_base, bot_config e admin user com dados de exemplo.
 """
 import logging
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.knowledge import KnowledgeBase, BotConfig, KnowledgeCategory
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,18 @@ async def run_seeds(db: AsyncSession) -> None:
                 auto_create_order=False,
             ))
             logger.info("BotConfig inicial criado.")
+
+        # Seed admin user
+        user_count = await db.scalar(select(func.count()).select_from(User))
+        if user_count == 0:
+            from app.config import settings
+            from app.services.auth import hash_password
+            db.add(User(
+                username=settings.admin_username,
+                hashed_password=hash_password(settings.admin_password),
+                is_admin=True,
+            ))
+            logger.info("Utilizador admin criado: %s", settings.admin_username)
 
         await db.commit()
     except Exception as exc:

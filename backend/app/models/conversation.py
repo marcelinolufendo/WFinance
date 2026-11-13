@@ -20,6 +20,9 @@ class Conversation(Base):
     controlled_by: Mapped[ControlledBy] = mapped_column(
         Enum(ControlledBy), default=ControlledBy.human
     )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    internal_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    last_message_preview: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow

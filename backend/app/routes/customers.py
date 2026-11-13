@@ -143,6 +143,46 @@ async def import_customers(file: UploadFile = File(...), db: AsyncSession = Depe
     return {"created": created, "skipped": skipped, "errors": errors}
 
 
+@router.get("/customers/{customer_id}/history")
+async def customer_history(customer_id: int, db: AsyncSession = Depends(get_db)):
+    c = await db.get(Contact, customer_id)
+    if not c:
+        raise HTTPException(404, "Cliente não encontrado")
+
+    orders = (await db.scalars(
+        select(Order).where(Order.contact_id == customer_id).order_by(Order.created_at.desc())
+    )).all()
+
+    conversations = (await db.scalars(
+        select(Conversation).where(Conversation.contact_id == customer_id).order_by(Conversation.created_at.desc())
+    )).all()
+
+    return {
+        "contact": {"id": c.id, "phone": c.phone, "name": c.name, "segment": c.segment.value},
+        "orders": [
+            {
+                "id": o.id,
+                "status": o.status.value,
+                "payment_status": o.payment_status.value,
+                "total_amount": float(o.total_amount) if o.total_amount is not None else None,
+                "items_count": len(o.items) if o.items else 0,
+                "created_at": o.created_at.isoformat(),
+            }
+            for o in orders
+        ],
+        "conversations": [
+            {
+                "id": cv.id,
+                "controlled_by": cv.controlled_by.value,
+                "last_message_preview": cv.last_message_preview,
+                "resolved_at": cv.resolved_at.isoformat() if cv.resolved_at else None,
+                "created_at": cv.created_at.isoformat(),
+            }
+            for cv in conversations
+        ],
+    }
+
+
 @router.put("/customers/{customer_id}")
 async def update_customer(customer_id: int, body: ContactUpdate, db: AsyncSession = Depends(get_db)):
     c = await db.get(Contact, customer_id)

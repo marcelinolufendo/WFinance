@@ -135,7 +135,16 @@ export interface Conversation {
   contact: Contact;
   window_open: boolean;
   controlled_by: "human" | "bot";
+  last_message_preview: string | null;
+  resolved_at: string | null;
+  internal_notes: string | null;
   updated_at: string;
+}
+
+export interface QuickReply {
+  id: number;
+  title: string;
+  content: string;
 }
 
 export interface Message {
