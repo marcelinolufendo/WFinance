@@ -72,6 +72,10 @@ async def bot_reply(
         raw = data["choices"][0]["message"]["content"].strip()
         return _parse_response(raw)
 
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text[:500] if exc.response else ""
+        logger.error("Erro ao chamar OpenRouter [%s]: %s | body: %s", exc.response.status_code, exc, body)
+        return None
     except Exception as exc:
         logger.error("Erro ao chamar OpenRouter: %s", exc)
         return None

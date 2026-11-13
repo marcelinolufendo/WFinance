@@ -9,11 +9,11 @@ const CAT_LABELS: Record<string, string> = {
 const CATS = Object.keys(CAT_LABELS);
 const TONES = [{ value: "friendly", label: "Amigável" }, { value: "formal", label: "Formal" }, { value: "casual", label: "Casual" }];
 const MODELS = [
-  "google/gemini-2.0-flash-001",
-  "google/gemini-flash-1.5",
-  "meta-llama/llama-3.3-70b-instruct",
-  "anthropic/claude-haiku-3-5",
-  "mistralai/mistral-nemo",
+  { id: "google/gemini-2.0-flash-exp", label: "Gemini 2.0 Flash (recomendado)" },
+  { id: "google/gemini-flash-1.5", label: "Gemini 1.5 Flash" },
+  { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
+  { id: "anthropic/claude-haiku-3-5", label: "Claude 3.5 Haiku" },
+  { id: "mistralai/mistral-nemo", label: "Mistral Nemo" },
 ];
 
 type Tab = "config" | "knowledge";
@@ -126,7 +126,7 @@ export function BotPage() {
               <label className="block">
                 <span className="text-xs font-medium text-gray-600 mb-1 block">Modelo</span>
                 <select className="input" value={configForm.model} onChange={e => setConfigForm({ ...configForm, model: e.target.value })}>
-                  {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                  {MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                 </select>
               </label>
               <label className="block">

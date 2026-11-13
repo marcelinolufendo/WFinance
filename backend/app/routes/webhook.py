@@ -123,7 +123,7 @@ async def _handle_messages(
 
         # Bot de resposta automática (apenas mensagens de texto)
         if msg_type == MessageType.text and conversation.controlled_by.value == "bot":
-            asyncio.create_task(_bot_auto_reply(conversation.id, contact.id, db))
+            asyncio.create_task(_bot_auto_reply(conversation.id, contact.id))
 
 
 async def _handle_statuses(statuses: list[dict], db: AsyncSession) -> None:
@@ -195,7 +195,7 @@ def _extract_mime(msg: dict) -> str | None:
     return block.get("mime_type")
 
 
-async def _bot_auto_reply(conversation_id: int, contact_id: int, _db: AsyncSession) -> None:
+async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
     """Chama o bot e envia a resposta automática via WhatsApp."""
     from app.database import AsyncSessionLocal
     from app.services.bot import bot_reply, get_bot_config
