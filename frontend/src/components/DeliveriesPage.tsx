@@ -56,6 +56,8 @@ export function DeliveriesPage() {
     try {
       const payload = {
         address: form.address || null,
+        contact_name: (form as any).contact_name || null,
+        contact_phone: (form as any).contact_phone || null,
         scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
         driver_name: form.driver_name || null,
         notes: form.notes || null,
