@@ -4,6 +4,7 @@ export interface Product {
   description: string | null;
   price: number | null;
   stock: number | null;
+  stock_min: number | null;
   status: "active" | "inactive";
   created_at: string;
   updated_at: string;
@@ -28,6 +29,10 @@ export interface Campaign {
   status: "draft" | "active" | "paused" | "ended";
   starts_at: string | null;
   ends_at: string | null;
+  template_name: string | null;
+  template_language: string | null;
+  sent_count: number;
+  target_segment: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -60,9 +65,28 @@ export interface Order {
   items: OrderItem[];
   total_amount: number | null;
   notes: string | null;
+  return_status: "none" | "requested" | "approved" | "refunded" | "rejected";
+  return_notes: string | null;
   delivery: Delivery | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Tag {
+  id: number;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export interface ReportData {
+  avg_response_time_minutes: number | null;
+  conversion_rate: number;
+  top_words: { word: string; count: number }[];
+  conversations_per_day: { date: string; count: number }[];
+  orders_per_day: { date: string; orders: number; revenue: number }[];
+  stock_alerts: { id: number; name: string; stock: number; stock_min: number }[];
+  totals: { conversations: number; orders: number; revenue: number; customers: number };
 }
 
 export interface OrderPayload {

@@ -13,8 +13,9 @@ import { ServicesPage } from "./components/ServicesPage";
 import { CampaignsPage } from "./components/CampaignsPage";
 import { BotPage } from "./components/BotPage";
 import { LoginPage } from "./components/LoginPage";
+import ReportsPage from "./components/ReportsPage";
 
-type Section = "dashboard" | "chat" | "orders" | "deliveries" | "customers" | "products" | "services" | "campaigns" | "bot";
+type Section = "dashboard" | "chat" | "orders" | "deliveries" | "customers" | "products" | "services" | "campaigns" | "bot" | "reports";
 
 const NAV: { key: Section; label: string; icon: string }[] = [
   { key: "dashboard", label: "Dashboard", icon: "📊" },
@@ -26,6 +27,7 @@ const NAV: { key: Section; label: string; icon: string }[] = [
   { key: "services", label: "Serviços", icon: "🛠️" },
   { key: "campaigns", label: "Campanhas", icon: "📢" },
   { key: "bot", label: "Bot IA", icon: "🤖" },
+  { key: "reports", label: "Relatórios", icon: "📈" },
 ];
 
 function playBeep() {
@@ -203,6 +205,7 @@ export default function App() {
           {section === "services" && <ServicesPage />}
           {section === "campaigns" && <CampaignsPage />}
           {section === "bot" && <BotPage />}
+          {section === "reports" && <ReportsPage />}
         </main>
       )}
     </div>

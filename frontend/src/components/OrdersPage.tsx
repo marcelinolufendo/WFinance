@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Order, OrderPayload, Customer, Product, Service } from "../types";
-import { fetchOrders, createOrder, updateOrder, deleteOrder, fetchCustomers, fetchProducts, fetchServices } from "../api";
+import { fetchOrders, createOrder, updateOrder, deleteOrder, fetchCustomers, fetchProducts, fetchServices, updateOrderReturn, exportInvoicePdf } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho", confirmed: "Confirmada", preparing: "Em preparação",
@@ -91,6 +91,22 @@ export function OrdersPage() {
     await load();
   }
 
+  async function handleReturn(o: Order) {
+    const statuses = ["none", "requested", "approved", "refunded", "rejected"];
+    const labels = ["Sem devolução", "Pedido", "Aprovado", "Reembolsado", "Rejeitado"];
+    const current = statuses.indexOf(o.return_status ?? "none");
+    const choice = prompt(
+      `Estado atual: ${labels[current]}\nNovo estado (0-${statuses.length - 1}):\n${statuses.map((s, i) => `${i} - ${labels[i]}`).join("\n")}`
+    );
+    if (choice === null) return;
+    const idx = parseInt(choice);
+    if (isNaN(idx) || idx < 0 || idx >= statuses.length) return;
+    try {
+      await updateOrderReturn(o.id, statuses[idx]);
+      await load();
+    } catch (e: any) { alert(e.message); }
+  }
+
   return (
     <div className="p-6 flex-1 overflow-auto">
       <div className="flex items-center justify-between mb-4">
@@ -110,6 +126,11 @@ export function OrdersPage() {
                   <span className={`px-2 py-0.5 rounded text-xs font-semibold ${STATUS_COLORS[o.status]}`}>{STATUS_LABELS[o.status]}</span>
                   {o.payment_status === "paid" && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Pago</span>}
                   {o.payment_status === "unpaid" && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-600">Por pagar</span>}
+                  {o.return_status && o.return_status !== "none" && (
+                    <span className="px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">
+                      ↩ {o.return_status === "requested" ? "Dev. pedida" : o.return_status === "approved" ? "Dev. aprovada" : o.return_status === "refunded" ? "Reembolsado" : "Dev. rejeitada"}
+                    </span>
+                  )}
                 </div>
                 <div className="text-sm text-gray-500 mb-1">
                   {o.items.length} {o.items.length === 1 ? "artigo" : "artigos"}
@@ -121,7 +142,9 @@ export function OrdersPage() {
                 {o.notes && <p className="text-xs text-gray-400 mt-1 italic">{o.notes}</p>}
                 <p className="text-xs text-gray-300 mt-1">{new Date(o.created_at).toLocaleDateString("pt-AO")}</p>
               </div>
-              <div className="flex gap-2 ml-4">
+              <div className="flex gap-2 ml-4 flex-wrap justify-end">
+                <button onClick={() => exportInvoicePdf(o.id).catch(e => alert(e.message))} className="text-gray-500 hover:underline text-sm" title="Descarregar fatura PDF">📄 Fatura</button>
+                <button onClick={() => handleReturn(o)} className="text-orange-600 hover:underline text-sm">↩ Dev.</button>
                 <button onClick={() => openEdit(o)} className="text-blue-600 hover:underline text-sm">Editar</button>
                 <button onClick={() => remove(o.id)} className="text-red-500 hover:underline text-sm">Eliminar</button>
               </div>

@@ -30,6 +30,13 @@ async def _run_migrations(conn) -> None:
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS internal_notes VARCHAR(2000)",
         "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS last_message_preview VARCHAR(120)",
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_min INTEGER",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS return_status VARCHAR(20) NOT NULL DEFAULT 'none'",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS return_notes TEXT",
+        "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_name VARCHAR(100)",
+        "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_language VARCHAR(20) DEFAULT 'pt_BR'",
+        "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS sent_count INTEGER DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS target_segment VARCHAR(50)",
     ]
     for sql in migrations:
         await conn.execute(text(sql))
@@ -78,7 +85,7 @@ async def auth_middleware(request: Request, call_next):
 # Routers
 # ---------------------------------------------------------------------------
 
-from app.routes import auth, quick_replies, export  # noqa: E402
+from app.routes import auth, quick_replies, export, tags, reports  # noqa: E402
 
 app.include_router(webhook.router)
 app.include_router(auth.router)
@@ -93,6 +100,8 @@ app.include_router(dashboard.router)
 app.include_router(knowledge.router)
 app.include_router(quick_replies.router)
 app.include_router(export.router)
+app.include_router(tags.router)
+app.include_router(reports.router)
 
 
 @app.get("/health")

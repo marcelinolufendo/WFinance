@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Customer } from "../types";
-import { fetchCustomers, updateCustomer, createCustomer, importCustomersCSV, fetchCustomerHistory, exportCustomersUrl } from "../api";
+import { fetchCustomers, updateCustomer, createCustomer, importCustomersCSV, fetchCustomerHistory, exportCustomers } from "../api";
 
 const SEGMENT_LABELS: Record<string, string> = { regular: "Regular", vip: "VIP", inactive: "Inativo", lead: "Lead" };
 const SEGMENT_COLORS: Record<string, string> = {
@@ -101,7 +101,7 @@ export function CustomersPage() {
           </select>
           <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCSV} />
           <button onClick={() => csvInputRef.current?.click()} className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50">Importar CSV</button>
-          <a href={exportCustomersUrl()} download className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50">📥 Excel</a>
+          <button onClick={() => exportCustomers().catch(e => alert(e.message))} className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50">📥 Excel</button>
           <button onClick={() => setCreateModal(true)} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">+ Novo</button>
         </div>
       </div>

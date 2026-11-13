@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from app.database import get_db
-from app.models.orders import Order, Delivery, OrderStatus, PaymentMethod, PaymentStatus, DeliveryStatus
+from app.models.orders import Order, Delivery, OrderStatus, PaymentMethod, PaymentStatus, DeliveryStatus, ReturnStatus
 from app.models.contact import Contact
 
 router = APIRouter(tags=["orders"])
@@ -145,6 +145,36 @@ async def update_order_status(order_id: int, status: OrderStatus, db: AsyncSessi
     return _order_dict(o)
 
 
+@router.patch("/orders/{order_id}/return")
+async def update_return_status(
+    order_id: int,
+    return_status: ReturnStatus,
+    return_notes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    o = await db.scalar(
+        select(Order).where(Order.id == order_id).options(selectinload(Order.contact), selectinload(Order.delivery))
+    )
+    if not o:
+        raise HTTPException(404, "Encomenda não encontrada")
+    o.return_status = return_status
+    if return_notes is not None:
+        o.return_notes = return_notes
+    await db.commit()
+    await db.refresh(o)
+
+    # Notificação ao cliente
+    if o.contact and o.contact.phone and return_status == ReturnStatus.refunded:
+        import asyncio
+        from app.services.whatsapp import send_text
+        asyncio.create_task(send_text(
+            o.contact.phone,
+            f"💰 O reembolso da tua encomenda #{o.id} foi processado com sucesso. Obrigado pela compreensão!"
+        ))
+
+    return _order_dict(o)
+
+
 @router.delete("/orders/{order_id}", status_code=204)
 async def delete_order(order_id: int, db: AsyncSession = Depends(get_db)):
     o = await db.get(Order, order_id)
@@ -211,6 +241,8 @@ def _order_dict(o: Order) -> dict:
         "items": o.items or [],
         "total_amount": float(o.total_amount) if o.total_amount is not None else None,
         "notes": o.notes,
+        "return_status": o.return_status.value if o.return_status else "none",
+        "return_notes": o.return_notes,
         "delivery": _delivery_dict(o.delivery) if o.delivery else None,
         "created_at": o.created_at.isoformat(),
         "updated_at": o.updated_at.isoformat(),

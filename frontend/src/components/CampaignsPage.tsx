@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Campaign } from "../types";
-import { fetchCampaigns, createCampaign, updateCampaign, deleteCampaign } from "../api";
+import { fetchCampaigns, createCampaign, updateCampaign, deleteCampaign, sendCampaign } from "../api";
 
 type Status = Campaign["status"];
 
@@ -19,6 +19,10 @@ const EMPTY: Omit<Campaign, "id" | "created_at" | "updated_at"> = {
   status: "draft",
   starts_at: null,
   ends_at: null,
+  template_name: null,
+  template_language: "pt_BR",
+  sent_count: 0,
+  target_segment: null,
 };
 
 export function CampaignsPage() {
@@ -26,6 +30,7 @@ export function CampaignsPage() {
   const [modal, setModal] = useState<{ open: boolean; editing: Campaign | null }>({ open: false, editing: null });
   const [form, setForm] = useState({ ...EMPTY });
   const [loading, setLoading] = useState(false);
+  const [sendingId, setSendingId] = useState<number | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -66,6 +71,24 @@ export function CampaignsPage() {
     await load();
   }
 
+  async function handleSend(c: Campaign) {
+    const segment = c.target_segment ?? "";
+    const confirmMsg = segment
+      ? `Enviar campanha "${c.name}" ao segmento "${segment}"?`
+      : `Enviar campanha "${c.name}" a TODOS os clientes com número de telefone?`;
+    if (!confirm(confirmMsg)) return;
+    setSendingId(c.id);
+    try {
+      const result = await sendCampaign(c.id, segment || undefined);
+      alert(`Campanha enviada com sucesso!\nMensagens enviadas: ${result.sent} / ${result.total_contacts} contactos`);
+      await load();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
   return (
     <div className="p-6 flex-1 overflow-auto">
       <div className="flex items-center justify-between mb-4">
@@ -91,12 +114,22 @@ export function CampaignsPage() {
                     {c.message_template}
                   </div>
                 )}
-                <div className="text-xs text-gray-400 flex gap-4">
+                <div className="text-xs text-gray-400 flex gap-4 flex-wrap">
                   {c.starts_at && <span>Início: {new Date(c.starts_at).toLocaleDateString("pt-AO")}</span>}
                   {c.ends_at && <span>Fim: {new Date(c.ends_at).toLocaleDateString("pt-AO")}</span>}
+                  {c.sent_count > 0 && <span className="text-purple-600 font-medium">📤 {c.sent_count} enviados</span>}
+                  {c.target_segment && <span>Segmento: {c.target_segment}</span>}
                 </div>
               </div>
-              <div className="flex gap-2 ml-4">
+              <div className="flex gap-2 ml-4 flex-wrap justify-end">
+                <button
+                  onClick={() => handleSend(c)}
+                  disabled={sendingId === c.id || !c.message_template}
+                  className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 disabled:opacity-50"
+                  title={!c.message_template ? "Adiciona uma mensagem primeiro" : "Enviar via WhatsApp"}
+                >
+                  {sendingId === c.id ? "A enviar…" : "📤 Enviar"}
+                </button>
                 <button onClick={() => openEdit(c)} className="text-blue-600 hover:underline text-sm">Editar</button>
                 <button onClick={() => remove(c.id)} className="text-red-500 hover:underline text-sm">Eliminar</button>
               </div>

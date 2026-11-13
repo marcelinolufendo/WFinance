@@ -27,6 +27,14 @@ class PaymentStatus(PyEnum):
     partial = "partial"
 
 
+class ReturnStatus(PyEnum):
+    none = "none"
+    requested = "requested"
+    approved = "approved"
+    refunded = "refunded"
+    rejected = "rejected"
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -40,6 +48,8 @@ class Order(Base):
     items: Mapped[list] = mapped_column(JSON, default=list)
     total_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     notes: Mapped[str | None] = mapped_column(Text)
+    return_status: Mapped[ReturnStatus] = mapped_column(Enum(ReturnStatus), default=ReturnStatus.none)
+    return_notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

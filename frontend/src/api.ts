@@ -1,4 +1,4 @@
-import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, OrderPayload, Delivery, Customer, BotConfig, KnowledgeEntry, QuickReply } from "./types";
+import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, OrderPayload, Delivery, Customer, BotConfig, KnowledgeEntry, QuickReply, Tag, ReportData } from "./types";
 
 const BASE = "/api";
 
@@ -342,15 +342,100 @@ export async function deleteQuickReply(id: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Tags
+// ---------------------------------------------------------------------------
+
+export async function fetchTags(): Promise<Tag[]> {
+  const r = await apiFetch(`${BASE}/tags`);
+  if (!r.ok) throw new Error("Erro ao carregar tags");
+  return r.json();
+}
+
+export async function createTag(data: { name: string; color: string }): Promise<Tag> {
+  const r = await apiFetch(`${BASE}/tags`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao criar tag");
+  return r.json();
+}
+
+export async function deleteTag(id: number): Promise<void> {
+  await apiFetch(`${BASE}/tags/${id}`, { method: "DELETE" });
+}
+
+export async function addTagToConversation(conversationId: number, tagId: number): Promise<void> {
+  await apiFetch(`${BASE}/conversations/${conversationId}/tags/${tagId}`, { method: "POST" });
+}
+
+export async function removeTagFromConversation(conversationId: number, tagId: number): Promise<void> {
+  await apiFetch(`${BASE}/conversations/${conversationId}/tags/${tagId}`, { method: "DELETE" });
+}
+
+export async function fetchConversationTags(conversationId: number): Promise<Tag[]> {
+  const r = await apiFetch(`${BASE}/conversations/${conversationId}/tags`);
+  if (!r.ok) return [];
+  return r.json();
+}
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+export async function fetchReports(): Promise<ReportData> {
+  const r = await apiFetch(`${BASE}/reports`);
+  if (!r.ok) throw new Error("Erro ao carregar relatórios");
+  return r.json();
+}
+
+// ---------------------------------------------------------------------------
+// Orders (extra)
+// ---------------------------------------------------------------------------
+
+export async function updateOrderReturn(id: number, return_status: string, return_notes?: string): Promise<Order> {
+  const params = new URLSearchParams({ return_status });
+  if (return_notes !== undefined) params.set("return_notes", return_notes);
+  const r = await apiFetch(`${BASE}/orders/${id}/return?${params}`, { method: "PATCH" });
+  if (!r.ok) throw new Error("Erro ao atualizar devolução");
+  return r.json();
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns (extra)
+// ---------------------------------------------------------------------------
+
+export async function sendCampaign(id: number, target_segment?: string): Promise<{ sent: number; total_contacts: number }> {
+  const r = await apiFetch(`${BASE}/campaigns/${id}/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_segment: target_segment ?? null }),
+  });
+  if (!r.ok) throw new Error("Erro ao enviar campanha");
+  return r.json();
+}
+
+// ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
 
-export function exportCustomersUrl(): string {
-  return `${BASE}/export/customers`;
+export async function exportWithAuth(url: string, filename: string): Promise<void> {
+  const r = await apiFetch(url);
+  if (!r.ok) throw new Error("Erro ao exportar");
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-export function exportOrdersUrl(): string {
-  return `${BASE}/export/orders`;
+export async function exportInvoicePdf(orderId: number): Promise<void> {
+  await exportWithAuth(`${BASE}/export/orders/${orderId}/invoice`, `fatura-${orderId}.pdf`);
+}
+
+export async function exportCustomers(): Promise<void> {
+  await exportWithAuth(`${BASE}/export/customers`, "clientes.xlsx");
+}
+
+export async function exportOrders(): Promise<void> {
+  await exportWithAuth(`${BASE}/export/orders`, "encomendas.xlsx");
 }
 
 // ---------------------------------------------------------------------------

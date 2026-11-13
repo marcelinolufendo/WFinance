@@ -6,6 +6,8 @@ from app.models.orders import Order, Delivery, OrderStatus, PaymentMethod, Payme
 from app.models.knowledge import KnowledgeBase, BotConfig, KnowledgeCategory
 from app.models.user import User
 from app.models.quick_reply import QuickReply
+from app.models.tag import Tag
+from app.models.orders import ReturnStatus
 
 __all__ = [
     "Contact",
@@ -32,4 +34,6 @@ __all__ = [
     "KnowledgeCategory",
     "User",
     "QuickReply",
+    "Tag",
+    "ReturnStatus",
 ]

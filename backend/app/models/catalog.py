@@ -25,6 +25,7 @@ class Product(Base):
     description: Mapped[str | None] = mapped_column(Text)
     price: Mapped[float | None] = mapped_column(Numeric(12, 2))
     stock: Mapped[int | None] = mapped_column(Integer)
+    stock_min: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[ProductStatus] = mapped_column(Enum(ProductStatus), default=ProductStatus.active)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

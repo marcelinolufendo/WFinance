@@ -18,6 +18,7 @@ class ProductIn(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     stock: Optional[int] = None
+    stock_min: Optional[int] = None
     status: ProductStatus = ProductStatus.active
 
 
@@ -36,6 +37,13 @@ class CampaignIn(BaseModel):
     status: CampaignStatus = CampaignStatus.draft
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
+    template_name: Optional[str] = None
+    template_language: Optional[str] = "pt_BR"
+    target_segment: Optional[str] = None
+
+
+class CampaignSendIn(BaseModel):
+    target_segment: Optional[str] = None  # "vip", "regular", etc. None = todos
 
 
 # ── Products ─────────────────────────────────────────────────────────────────
@@ -176,6 +184,43 @@ async def delete_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 
+@router.post("/campaigns/{campaign_id}/send")
+async def send_campaign(campaign_id: int, body: CampaignSendIn, db: AsyncSession = Depends(get_db)):
+    from app.models.contact import Contact, ContactSegment
+    from app.services.whatsapp import send_text
+    import asyncio
+
+    c = await db.get(Campaign, campaign_id)
+    if not c:
+        raise HTTPException(404, "Campanha não encontrada")
+    if not c.message_template:
+        raise HTTPException(400, "Campanha sem template de mensagem")
+
+    q = select(Contact).where(Contact.phone.isnot(None))
+    segment = body.target_segment or c.target_segment
+    if segment:
+        q = q.where(Contact.segment == segment)
+
+    contacts = (await db.scalars(q)).all()
+    if not contacts:
+        return {"sent": 0, "message": "Nenhum contacto encontrado para o segmento"}
+
+    sent = 0
+    for contact in contacts:
+        try:
+            msg = c.message_template.replace("{nome}", contact.name or "Cliente")
+            asyncio.create_task(send_text(contact.phone, msg))
+            sent += 1
+        except Exception:
+            pass
+
+    c.sent_count = (c.sent_count or 0) + sent
+    c.target_segment = segment
+    await db.commit()
+
+    return {"sent": sent, "total_contacts": len(contacts)}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _product_dict(p: Product) -> dict:
@@ -185,6 +230,7 @@ def _product_dict(p: Product) -> dict:
         "description": p.description,
         "price": float(p.price) if p.price is not None else None,
         "stock": p.stock,
+        "stock_min": p.stock_min,
         "status": p.status.value,
         "created_at": p.created_at.isoformat(),
         "updated_at": p.updated_at.isoformat(),
@@ -213,6 +259,10 @@ def _campaign_dict(c: Campaign) -> dict:
         "status": c.status.value,
         "starts_at": c.starts_at.isoformat() if c.starts_at else None,
         "ends_at": c.ends_at.isoformat() if c.ends_at else None,
+        "template_name": getattr(c, "template_name", None),
+        "template_language": getattr(c, "template_language", "pt_BR"),
+        "sent_count": getattr(c, "sent_count", 0) or 0,
+        "target_segment": getattr(c, "target_segment", None),
         "created_at": c.created_at.isoformat(),
         "updated_at": c.updated_at.isoformat(),
     }

@@ -7,6 +7,7 @@ const EMPTY: Omit<Product, "id" | "created_at" | "updated_at"> = {
   description: "",
   price: null,
   stock: null,
+  stock_min: null,
   status: "active",
 };
 
@@ -28,7 +29,7 @@ export function ProductsPage() {
   }
 
   function openEdit(p: Product) {
-    setForm({ name: p.name, description: p.description ?? "", price: p.price, stock: p.stock, status: p.status });
+    setForm({ name: p.name, description: p.description ?? "", price: p.price, stock: p.stock, stock_min: p.stock_min, status: p.status });
     setModal({ open: true, editing: p });
   }
 
@@ -77,10 +78,15 @@ export function ProductsPage() {
             <tr><td colSpan={5} className="p-4 text-center text-gray-400">Sem produtos</td></tr>
           )}
           {items.map((p) => (
-            <tr key={p.id} className="hover:bg-gray-50">
+            <tr key={p.id} className={`hover:bg-gray-50 ${p.stock !== null && p.stock_min !== null && p.stock <= p.stock_min ? "bg-orange-50" : ""}`}>
               <td className="p-3 border font-medium">{p.name}</td>
               <td className="p-3 border">{p.price != null ? p.price.toLocaleString("pt-AO") : "—"}</td>
-              <td className="p-3 border">{p.stock ?? "—"}</td>
+              <td className="p-3 border">
+                {p.stock ?? "—"}
+                {p.stock !== null && p.stock_min !== null && p.stock <= p.stock_min && (
+                  <span className="ml-2 text-orange-600 text-xs font-semibold">⚠️ stock baixo</span>
+                )}
+              </td>
               <td className="p-3 border">
                 <span className={`px-2 py-0.5 rounded text-xs font-semibold ${p.status === "active" ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-500"}`}>
                   {p.status === "active" ? "Ativo" : "Inativo"}
@@ -112,6 +118,9 @@ export function ProductsPage() {
                 </Field>
                 <Field label="Stock">
                   <input type="number" className="input" value={form.stock ?? ""} onChange={(e) => setForm({ ...form, stock: e.target.value ? +e.target.value : null })} />
+                </Field>
+                <Field label="Stock mínimo">
+                  <input type="number" className="input" value={form.stock_min ?? ""} onChange={(e) => setForm({ ...form, stock_min: e.target.value ? +e.target.value : null })} placeholder="Alerta abaixo deste valor" />
                 </Field>
               </div>
               <Field label="Estado">

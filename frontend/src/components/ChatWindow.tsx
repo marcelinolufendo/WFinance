@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { Conversation, Message, OrderPayload, QuickReply } from "../types";
+import type { Conversation, Message, OrderPayload, QuickReply, Tag } from "../types";
 import {
   fetchMessages, sendMessage, openWebSocket, suggestReply, createOrder,
   toggleConversationMode, resolveConversation, updateConversationNotes, fetchQuickReplies,
+  fetchTags, fetchConversationTags, addTagToConversation, removeTagFromConversation,
 } from "../api";
 import { MediaMessage } from "./MediaMessage";
 
@@ -39,12 +40,18 @@ export function ChatWindow({ conversation, onModeChange, onConversationUpdate }:
   const [savingNotes, setSavingNotes] = useState(false);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [showQR, setShowQR] = useState(false);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [convTags, setConvTags] = useState<Tag[]>([]);
+  const [showTags, setShowTags] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMode(conversation.controlled_by);
     setResolved(!!conversation.resolved_at);
     setNotes(conversation.internal_notes ?? "");
+    // load tags for this conversation
+    fetchTags().then(setAllTags).catch(() => {});
+    fetchConversationTags(conversation.id).then(setConvTags).catch(() => {});
   }, [conversation.id]);
 
   useEffect(() => {
@@ -176,11 +183,51 @@ export function ChatWindow({ conversation, onModeChange, onConversationUpdate }:
           <button onClick={() => setShowNotes(!showNotes)} className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 hover:bg-yellow-200 font-medium">
             📝 Notas
           </button>
+          <button onClick={() => setShowTags(!showTags)} className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-medium">
+            🏷️ Tags
+          </button>
           <button onClick={() => setOrderModal(true)} className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full hover:bg-amber-200 font-medium">
             🛒 Encomenda
           </button>
         </div>
       </div>
+
+      {/* Tags panel */}
+      {showTags && (
+        <div className="border-b bg-indigo-50 p-3">
+          <p className="text-xs font-semibold text-indigo-800 mb-2">Tags desta conversa</p>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {convTags.map(tag => (
+              <span key={tag.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium text-white" style={{ backgroundColor: tag.color }}>
+                {tag.name}
+                <button
+                  onClick={async () => {
+                    await removeTagFromConversation(conversation.id, tag.id);
+                    setConvTags(prev => prev.filter(t => t.id !== tag.id));
+                  }}
+                  className="ml-1 opacity-70 hover:opacity-100"
+                >✕</button>
+              </span>
+            ))}
+            {convTags.length === 0 && <span className="text-xs text-indigo-400">Sem tags</span>}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {allTags.filter(t => !convTags.find(c => c.id === t.id)).map(tag => (
+              <button
+                key={tag.id}
+                onClick={async () => {
+                  await addTagToConversation(conversation.id, tag.id);
+                  setConvTags(prev => [...prev, tag]);
+                }}
+                className="px-2 py-0.5 rounded-full text-xs font-medium border hover:opacity-80"
+                style={{ borderColor: tag.color, color: tag.color }}
+              >
+                + {tag.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Internal notes panel */}
       {showNotes && (
