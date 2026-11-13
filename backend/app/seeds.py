@@ -64,17 +64,21 @@ async def run_seeds(db: AsyncSession) -> None:
             ))
             logger.info("BotConfig inicial criado.")
 
-        # Seed admin user
-        user_count = await db.scalar(select(func.count()).select_from(User))
-        if user_count == 0:
-            from app.config import settings
-            from app.services.auth import hash_password
+        # Seed admin user — upsert para garantir que a password reflecte ADMIN_PASSWORD
+        from app.config import settings
+        from app.services.auth import hash_password
+        existing_admin = await db.scalar(select(User).where(User.username == settings.admin_username))
+        if existing_admin is None:
             db.add(User(
                 username=settings.admin_username,
                 hashed_password=hash_password(settings.admin_password),
                 is_admin=True,
             ))
             logger.info("Utilizador admin criado: %s", settings.admin_username)
+        else:
+            existing_admin.hashed_password = hash_password(settings.admin_password)
+            existing_admin.is_admin = True
+            logger.info("Password do admin actualizada: %s", settings.admin_username)
 
         await db.commit()
     except Exception as exc:
