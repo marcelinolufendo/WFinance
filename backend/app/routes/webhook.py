@@ -119,7 +119,7 @@ async def _handle_messages(
 
         # Dispara download assíncrono para tipos de média
         if msg_type != MessageType.text and content and mime_type:
-            asyncio.create_task(_download_and_store(message.id, content, mime_type, db))
+            asyncio.create_task(_download_and_store(message.id, content, mime_type))
 
         # Bot de resposta automática (apenas mensagens de texto)
         if msg_type == MessageType.text and conversation.controlled_by.value == "bot":
@@ -260,7 +260,7 @@ async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
         logger.error("Erro no bot auto-reply: %s", exc)
 
 
-async def _download_and_store(message_id: int, media_id: str, mime_type: str, _db: AsyncSession) -> None:
+async def _download_and_store(message_id: int, media_id: str, mime_type: str) -> None:
     """Baixa a mídia e actualiza o campo media_path na mensagem."""
     try:
         relative_path = await download_media(media_id, mime_type)
