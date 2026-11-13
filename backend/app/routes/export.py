@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.contact import Contact
 from app.models.orders import Order
+from app.services import whatsapp as wa
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -154,3 +155,39 @@ async def export_invoice_pdf(order_id: int, db: AsyncSession = Depends(get_db)):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=factura_{o.id}.pdf"},
     )
+
+
+@router.post("/orders/{order_id}/send-invoice")
+async def send_invoice_whatsapp(order_id: int, db: AsyncSession = Depends(get_db)):
+    o = await db.scalar(
+        select(Order).where(Order.id == order_id).options(selectinload(Order.contact))
+    )
+    if not o:
+        raise HTTPException(404, "Encomenda não encontrada")
+    contact = o.contact
+    if not contact or not contact.phone:
+        raise HTTPException(400, "Cliente sem número de telefone")
+
+    items = o.items or []
+    lines = [f"🧾 *FACTURA #{o.id}*"]
+    if contact.name:
+        lines.append(f"Cliente: {contact.name}")
+    lines.append(f"Data: {o.created_at.strftime('%d/%m/%Y')}")
+    lines.append("")
+    lines.append("*Artigos:*")
+    for item in items:
+        name = item.get("name", "")
+        qty = item.get("quantity", 1)
+        price = float(item.get("unit_price", 0))
+        lines.append(f"  • {name} x{qty} — {price * qty:,.0f} AOA")
+    lines.append("")
+    total = float(o.total_amount) if o.total_amount else sum(
+        float(i.get("unit_price", 0)) * float(i.get("quantity", 1)) for i in items
+    )
+    lines.append(f"*TOTAL: {total:,.0f} AOA*")
+    lines.append(f"Pagamento: {o.payment_method.value} ({o.payment_status.value})")
+    if o.notes:
+        lines.append(f"Notas: {o.notes}")
+
+    await wa.send_text(contact.phone, "\n".join(lines))
+    return {"detail": "Fatura enviada via WhatsApp"}

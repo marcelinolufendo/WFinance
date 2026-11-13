@@ -430,6 +430,10 @@ export async function exportInvoicePdf(orderId: number): Promise<void> {
   await exportWithAuth(`${BASE}/export/orders/${orderId}/invoice`, `fatura-${orderId}.pdf`);
 }
 
+export async function sendInvoiceWhatsApp(orderId: number): Promise<void> {
+  await apiFetch(`${BASE}/export/orders/${orderId}/send-invoice`, { method: "POST" });
+}
+
 export async function exportCustomers(): Promise<void> {
   await exportWithAuth(`${BASE}/export/customers`, "clientes.xlsx");
 }

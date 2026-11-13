@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Order, OrderPayload, Customer, Product, Service } from "../types";
-import { fetchOrders, createOrder, updateOrder, deleteOrder, fetchCustomers, fetchProducts, fetchServices, updateOrderReturn, exportInvoicePdf } from "../api";
+import { fetchOrders, createOrder, updateOrder, deleteOrder, fetchCustomers, fetchProducts, fetchServices, updateOrderReturn, exportInvoicePdf, sendInvoiceWhatsApp } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Rascunho", confirmed: "Confirmada", preparing: "Em preparação",
@@ -144,6 +144,7 @@ export function OrdersPage() {
               </div>
               <div className="flex gap-2 ml-4 flex-wrap justify-end">
                 <button onClick={() => exportInvoicePdf(o.id).catch(e => alert(e.message))} className="text-gray-500 hover:underline text-sm" title="Descarregar fatura PDF">📄 Fatura</button>
+                <button onClick={() => sendInvoiceWhatsApp(o.id).then(() => alert("Fatura enviada via WhatsApp!")).catch(e => alert(e.message))} className="text-green-600 hover:underline text-sm" title="Enviar fatura ao cliente via WhatsApp">📲 Enviar</button>
                 <button onClick={() => handleReturn(o)} className="text-orange-600 hover:underline text-sm">↩ Dev.</button>
                 <button onClick={() => openEdit(o)} className="text-blue-600 hover:underline text-sm">Editar</button>
                 <button onClick={() => remove(o.id)} className="text-red-500 hover:underline text-sm">Eliminar</button>
