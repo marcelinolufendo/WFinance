@@ -82,4 +82,5 @@ async def run_seeds(db: AsyncSession) -> None:
 
         await db.commit()
     except Exception as exc:
-        logger.error("Erro nos seeders: %s", exc)
+        logger.error("Erro nos seeders: %s", exc, exc_info=True)
+        raise
