@@ -3,21 +3,29 @@ import type { Conversation } from "./types";
 import { fetchConversations } from "./api";
 import { ConversationList } from "./components/ConversationList";
 import { ChatWindow } from "./components/ChatWindow";
+import { DashboardPage } from "./components/DashboardPage";
+import { OrdersPage } from "./components/OrdersPage";
+import { DeliveriesPage } from "./components/DeliveriesPage";
+import { CustomersPage } from "./components/CustomersPage";
 import { ProductsPage } from "./components/ProductsPage";
 import { ServicesPage } from "./components/ServicesPage";
 import { CampaignsPage } from "./components/CampaignsPage";
 
-type Section = "chat" | "products" | "services" | "campaigns";
+type Section = "dashboard" | "chat" | "orders" | "deliveries" | "customers" | "products" | "services" | "campaigns";
 
-const NAV: { key: Section; label: string; icon: string }[] = [
+const NAV: { key: Section; label: string; icon: string; group?: string }[] = [
+  { key: "dashboard", label: "Dashboard", icon: "📊" },
   { key: "chat", label: "Conversas", icon: "💬" },
+  { key: "orders", label: "Encomendas", icon: "🛒" },
+  { key: "deliveries", label: "Entregas", icon: "🚚" },
+  { key: "customers", label: "Clientes", icon: "👥" },
   { key: "products", label: "Produtos", icon: "📦" },
   { key: "services", label: "Serviços", icon: "🛠️" },
   { key: "campaigns", label: "Campanhas", icon: "📢" },
 ];
 
 export default function App() {
-  const [section, setSection] = useState<Section>("chat");
+  const [section, setSection] = useState<Section>("dashboard");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -29,14 +37,14 @@ export default function App() {
 
   return (
     <div className="flex h-screen font-sans text-gray-900">
-      {/* Sidebar de navegação */}
-      <nav className="w-16 bg-gray-900 flex flex-col items-center py-4 gap-1 shrink-0">
+      {/* Sidebar */}
+      <nav className="w-16 bg-gray-900 flex flex-col items-center py-3 gap-0.5 shrink-0 overflow-y-auto">
         {NAV.map((item) => (
           <button
             key={item.key}
             onClick={() => setSection(item.key)}
             title={item.label}
-            className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center text-xs gap-0.5 transition-colors ${
+            className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
               section === item.key ? "bg-gray-700 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
             }`}
           >
@@ -46,7 +54,7 @@ export default function App() {
         ))}
       </nav>
 
-      {/* Conteúdo principal */}
+      {/* Conteúdo */}
       {section === "chat" ? (
         <>
           <ConversationList
@@ -66,6 +74,10 @@ export default function App() {
         </>
       ) : (
         <main className="flex-1 flex flex-col overflow-hidden">
+          {section === "dashboard" && <DashboardPage />}
+          {section === "orders" && <OrdersPage />}
+          {section === "deliveries" && <DeliveriesPage />}
+          {section === "customers" && <CustomersPage />}
           {section === "products" && <ProductsPage />}
           {section === "services" && <ServicesPage />}
           {section === "campaigns" && <CampaignsPage />}

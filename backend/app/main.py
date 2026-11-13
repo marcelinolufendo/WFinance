@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routes import webhook, messages, ws, media, suggest, catalog
+from app.routes import webhook, messages, ws, media, suggest, catalog, orders, customers, dashboard
 
 
 @asynccontextmanager
@@ -30,6 +30,9 @@ app.include_router(ws.router)
 app.include_router(media.router)
 app.include_router(suggest.router)
 app.include_router(catalog.router)
+app.include_router(orders.router)
+app.include_router(customers.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")

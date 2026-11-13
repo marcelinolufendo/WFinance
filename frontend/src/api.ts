@@ -1,4 +1,4 @@
-import type { Conversation, Message, Product, Service, Campaign } from "./types";
+import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, Delivery, Customer } from "./types";
 
 const BASE = "/api";
 
@@ -34,6 +34,72 @@ export async function suggestReply(conversationId: number): Promise<string> {
   }
   const data = await r.json();
   return data.suggestion as string;
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+export async function fetchDashboard(): Promise<DashboardData> {
+  const r = await fetch(`${BASE}/dashboard`);
+  if (!r.ok) throw new Error("Erro ao carregar dashboard");
+  return r.json();
+}
+
+// ── Orders ────────────────────────────────────────────────────────────────────
+
+export async function fetchOrders(): Promise<Order[]> {
+  const r = await fetch(`${BASE}/orders`);
+  if (!r.ok) throw new Error("Erro ao carregar encomendas");
+  return r.json();
+}
+
+export async function createOrder(data: Omit<Order, "id" | "created_at" | "updated_at" | "delivery">): Promise<Order> {
+  const r = await fetch(`${BASE}/orders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao criar encomenda");
+  return r.json();
+}
+
+export async function updateOrder(id: number, data: Omit<Order, "id" | "created_at" | "updated_at" | "delivery">): Promise<Order> {
+  const r = await fetch(`${BASE}/orders/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao atualizar encomenda");
+  return r.json();
+}
+
+export async function deleteOrder(id: number): Promise<void> {
+  await fetch(`${BASE}/orders/${id}`, { method: "DELETE" });
+}
+
+// ── Deliveries ────────────────────────────────────────────────────────────────
+
+export async function fetchDeliveries(): Promise<Delivery[]> {
+  const r = await fetch(`${BASE}/deliveries`);
+  if (!r.ok) throw new Error("Erro ao carregar entregas");
+  return r.json();
+}
+
+export async function createDelivery(orderId: number, data: Omit<Delivery, "id" | "order_id" | "delivered_at" | "created_at" | "updated_at" | "order">): Promise<Delivery> {
+  const r = await fetch(`${BASE}/orders/${orderId}/delivery`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao criar entrega");
+  return r.json();
+}
+
+export async function updateDelivery(id: number, data: Omit<Delivery, "id" | "order_id" | "delivered_at" | "created_at" | "updated_at" | "order">): Promise<Delivery> {
+  const r = await fetch(`${BASE}/deliveries/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao atualizar entrega");
+  return r.json();
+}
+
+// ── Customers ─────────────────────────────────────────────────────────────────
+
+export async function fetchCustomers(): Promise<Customer[]> {
+  const r = await fetch(`${BASE}/customers`);
+  if (!r.ok) throw new Error("Erro ao carregar clientes");
+  return r.json();
+}
+
+export async function updateCustomer(id: number, data: Partial<Customer>): Promise<Customer> {
+  const r = await fetch(`${BASE}/customers/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) throw new Error("Erro ao atualizar cliente");
+  return r.json();
 }
 
 // ── Products ──────────────────────────────────────────────────────────────────
