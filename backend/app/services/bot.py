@@ -1,6 +1,6 @@
 """
 Bot de atendimento automático via OpenRouter.
-Constrói o system prompt dinamicamente com produtos, serviços e knowledge base.
+Suporta tool calling para consultar encomendas do cliente em tempo real.
 """
 import json
 import logging
@@ -18,6 +18,37 @@ logger = logging.getLogger(__name__)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _MAX_HISTORY = 15
 
+_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "consultar_pedidos",
+            "description": (
+                "Consulta as encomendas do cliente actual na base de dados. "
+                "Usa SEMPRE esta ferramenta quando o cliente perguntar sobre encomendas, "
+                "pedidos, estado de entrega, histórico de compras ou qualquer informação "
+                "relacionada com as suas compras. "
+                "Nunca peças ao cliente o nome ou número de encomenda — já sabes quem é."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "estado": {
+                        "type": "string",
+                        "enum": ["todos", "activos", "entregues", "cancelados"],
+                        "description": (
+                            "'activos' para encomendas em curso, "
+                            "'entregues' para concluídas, "
+                            "'cancelados', ou 'todos' para ver tudo."
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        },
+    }
+]
+
 
 async def get_bot_config(db: AsyncSession) -> BotConfig | None:
     return await db.scalar(select(BotConfig).where(BotConfig.id == 1))
@@ -25,6 +56,7 @@ async def get_bot_config(db: AsyncSession) -> BotConfig | None:
 
 async def bot_reply(
     conversation_id: int,
+    contact_id: int,
     history: list[dict],
     db: AsyncSession,
 ) -> dict[str, Any] | None:
@@ -47,29 +79,77 @@ async def bot_reply(
     if not messages:
         return None
 
-    payload = {
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://wfinance.app",
+        "X-Title": "WFinance Bot",
+    }
+
+    payload: dict[str, Any] = {
         "model": config.model,
         "messages": [{"role": "system", "content": system_prompt}, *messages],
         "max_tokens": 512,
         "temperature": 0.7,
+        "tools": _TOOLS,
+        "tool_choice": "auto",
     }
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                OPENROUTER_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://wfinance.app",
-                    "X-Title": "WFinance Bot",
-                },
-                json=payload,
-            )
+            resp = await client.post(OPENROUTER_URL, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
 
-        raw = data["choices"][0]["message"]["content"].strip()
+        choice = data["choices"][0]
+        msg = choice["message"]
+
+        # Modelo quer chamar uma ferramenta
+        if msg.get("tool_calls"):
+            tool_messages: list[dict] = [msg]
+
+            for tc in msg["tool_calls"]:
+                fn_name = tc["function"]["name"]
+                try:
+                    fn_args = json.loads(tc["function"].get("arguments", "{}"))
+                except json.JSONDecodeError:
+                    fn_args = {}
+
+                if fn_name == "consultar_pedidos":
+                    tool_result = await _run_consultar_pedidos(
+                        contact_id, fn_args.get("estado", "todos"), db
+                    )
+                else:
+                    tool_result = json.dumps({"error": "ferramenta desconhecida"})
+
+                logger.info("Tool %s → %s", fn_name, tool_result[:200])
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": tool_result,
+                })
+
+            # Segunda chamada: modelo formula resposta final com os dados reais
+            payload2: dict[str, Any] = {
+                "model": config.model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    *messages,
+                    *tool_messages,
+                ],
+                "max_tokens": 512,
+                "temperature": 0.7,
+            }
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp2 = await client.post(OPENROUTER_URL, headers=headers, json=payload2)
+                resp2.raise_for_status()
+                data2 = resp2.json()
+
+            raw = (data2["choices"][0]["message"].get("content") or "").strip()
+            return _parse_response(raw)
+
+        # Resposta normal sem tool call
+        raw = (msg.get("content") or "").strip()
         return _parse_response(raw)
 
     except httpx.HTTPStatusError as exc:
@@ -79,6 +159,58 @@ async def bot_reply(
     except Exception as exc:
         logger.error("Erro ao chamar OpenRouter: %s", exc)
         return None
+
+
+async def _run_consultar_pedidos(contact_id: int, estado: str, db: AsyncSession) -> str:
+    """Executa a tool: devolve encomendas do cliente em JSON."""
+    from app.models.orders import Order, OrderStatus
+
+    active_statuses = {
+        OrderStatus.draft, OrderStatus.confirmed,
+        OrderStatus.preparing, OrderStatus.delivering,
+    }
+
+    orders = (await db.scalars(
+        select(Order)
+        .where(Order.contact_id == contact_id)
+        .order_by(Order.created_at.desc())
+        .limit(20)
+    )).all()
+
+    if estado == "activos":
+        orders = [o for o in orders if o.status in active_statuses]
+    elif estado == "entregues":
+        orders = [o for o in orders if o.status == OrderStatus.delivered]
+    elif estado == "cancelados":
+        orders = [o for o in orders if o.status == OrderStatus.cancelled]
+
+    if not orders:
+        return json.dumps({"message": "Nenhuma encomenda encontrada.", "encomendas": []}, ensure_ascii=False)
+
+    STATUS_PT = {
+        "draft": "rascunho",
+        "confirmed": "confirmada",
+        "preparing": "em preparação",
+        "delivering": "a caminho / em entrega",
+        "delivered": "entregue",
+        "cancelled": "cancelada",
+    }
+
+    result = []
+    for o in orders:
+        items_str = ", ".join(
+            f"{i.get('name', '?')} x{i.get('quantity', 1)}"
+            for i in (o.items or [])
+        )
+        result.append({
+            "id": o.id,
+            "estado": STATUS_PT.get(o.status.value, o.status.value),
+            "itens": items_str or "—",
+            "total": f"{o.total_amount:,.0f} AOA" if o.total_amount else "—",
+            "data": o.created_at.strftime("%d/%m/%Y"),
+        })
+
+    return json.dumps({"encomendas": result, "total": len(result)}, ensure_ascii=False)
 
 
 async def _build_system_prompt(config: BotConfig, db: AsyncSession) -> str:
@@ -106,6 +238,7 @@ Tom: {tone_desc}.
 - Se o cliente perguntar por um produto que não existe, diz honestamente que não tens.
 - Nunca inventes preços, prazos ou informações que não estão aqui.
 - Para saudações iniciais, apresenta-te e pergunta como podes ajudar.
+- Quando o cliente perguntar sobre encomendas ou pedidos, usa SEMPRE a ferramenta consultar_pedidos — nunca peças o nome ou número de encomenda ao cliente.
 
 ## Quando o cliente quer fazer uma encomenda
 Se o cliente confirmar que quer encomendar algo, responde com JSON puro (sem markdown, sem ```):
@@ -186,7 +319,6 @@ def _build_messages(history: list[dict]) -> list[dict]:
         if m.get("type") == "text":
             return True
         if m.get("type") == "audio":
-            # Inclui apenas se o content é transcrição (não ID numérico do WhatsApp)
             return not content.strip().isdigit()
         return False
 

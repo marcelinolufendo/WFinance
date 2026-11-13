@@ -230,7 +230,7 @@ async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
                 for m in msgs
             ]
 
-            result = await bot_reply(conversation_id, history, session)
+            result = await bot_reply(conversation_id, contact_id, history, session)
             if not result:
                 return
 
