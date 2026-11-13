@@ -11,11 +11,25 @@ from app.routes import webhook, messages, ws, media, suggest, catalog, orders, c
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _run_migrations(conn)
     from app.database import AsyncSessionLocal
     from app.seeds import run_seeds
     async with AsyncSessionLocal() as session:
         await run_seeds(session)
     yield
+
+
+async def _run_migrations(conn) -> None:
+    """Aplica colunas novas em tabelas existentes (idempotente)."""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS address TEXT",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS segment VARCHAR(50) NOT NULL DEFAULT 'regular'",
+        "ALTER TABLE contacts ADD COLUMN IF NOT EXISTS internal_notes TEXT",
+    ]
+    for sql in migrations:
+        await conn.execute(text(sql))
 
 
 app = FastAPI(title="WFinance WhatsApp API", lifespan=lifespan)
