@@ -9,8 +9,8 @@ const CAT_LABELS: Record<string, string> = {
 const CATS = Object.keys(CAT_LABELS);
 const TONES = [{ value: "friendly", label: "Amigável" }, { value: "formal", label: "Formal" }, { value: "casual", label: "Casual" }];
 const MODELS = [
-  { id: "google/gemini-2.0-flash-exp", label: "Gemini 2.0 Flash (recomendado)" },
-  { id: "google/gemini-flash-1.5", label: "Gemini 1.5 Flash" },
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (recomendado)" },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B" },
   { id: "anthropic/claude-haiku-3-5", label: "Claude 3.5 Haiku" },
   { id: "mistralai/mistral-nemo", label: "Mistral Nemo" },
