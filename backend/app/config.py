@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     whatsapp_verify_token: str
     media_storage_path: str = "./media"
     anthropic_api_key: str
+    groq_api_key: str = ""
 
     class Config:
         env_file = ".env"

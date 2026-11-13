@@ -12,11 +12,17 @@ export function MediaMessage({ type, mediaPath, content }: Props) {
   }
 
   if (type === "audio") {
+    const hasTranscription = content && !content.trim().match(/^\d+$/);
     return (
-      <audio controls className="max-w-[220px]" preload="metadata">
-        <source src={src} />
-        Áudio não suportado neste browser.
-      </audio>
+      <div className="flex flex-col gap-1">
+        <audio controls className="max-w-[220px]" preload="metadata">
+          <source src={src} />
+          Áudio não suportado neste browser.
+        </audio>
+        {hasTranscription && (
+          <p className="text-xs italic text-gray-600 max-w-[220px] leading-relaxed">{content}</p>
+        )}
+      </div>
     );
   }
 

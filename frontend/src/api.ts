@@ -102,6 +102,23 @@ export async function fetchCustomers(): Promise<Customer[]> {
   return r.json();
 }
 
+export async function createCustomer(data: { phone: string; name?: string | null; email?: string | null; address?: string | null; segment?: string; internal_notes?: string | null }): Promise<Customer> {
+  const r = await fetch(`${BASE}/customers`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Erro ao criar cliente");
+  }
+  return r.json();
+}
+
+export async function importCustomersCSV(file: File): Promise<{ created: number; skipped: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`${BASE}/customers/import`, { method: "POST", body: form });
+  if (!r.ok) throw new Error("Erro ao importar CSV");
+  return r.json();
+}
+
 export async function updateCustomer(id: number, data: Partial<Customer>): Promise<Customer> {
   const r = await fetch(`${BASE}/customers/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   if (!r.ok) throw new Error("Erro ao atualizar cliente");
@@ -226,6 +243,28 @@ export function openWebSocket(conversationId: number, onMessage: (msg: Message) 
       onMessage(data);
     } catch {
       // ignorar mensagens malformadas
+    }
+  };
+  return ws;
+}
+
+export type GlobalWsEvent = {
+  type: "new_message";
+  conversation_id: number;
+  contact: { id: number; phone: string; name: string | null };
+  controlled_by: "human" | "bot";
+  preview: string;
+  direction: "inbound" | "outbound";
+};
+
+export function openGlobalWebSocket(onEvent: (evt: GlobalWsEvent) => void): WebSocket {
+  const ws = new WebSocket("/ws/global");
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data) as GlobalWsEvent;
+      onEvent(data);
+    } catch {
+      // ignorar
     }
   };
   return ws;

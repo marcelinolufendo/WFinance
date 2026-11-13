@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import csv
+import io
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -11,6 +13,15 @@ from app.models.conversation import Conversation
 from app.models.orders import Order, OrderStatus
 
 router = APIRouter(tags=["customers"])
+
+
+class ContactCreate(BaseModel):
+    phone: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    segment: ContactSegment = ContactSegment.regular
+    internal_notes: Optional[str] = None
 
 
 class ContactUpdate(BaseModel):
@@ -76,6 +87,60 @@ async def get_customer(customer_id: int, db: AsyncSession = Depends(get_db)):
             for o in orders.all()
         ],
     }
+
+
+@router.post("/customers")
+async def create_customer(body: ContactCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.scalar(select(Contact).where(Contact.phone == body.phone))
+    if existing:
+        raise HTTPException(400, "Número de telefone já registado")
+    contact = Contact(**body.model_dump())
+    db.add(contact)
+    await db.commit()
+    await db.refresh(contact)
+    return {
+        "id": contact.id, "phone": contact.phone, "name": contact.name,
+        "email": contact.email, "address": contact.address,
+        "segment": contact.segment.value, "internal_notes": contact.internal_notes,
+        "conversation_count": 0, "order_count": 0, "total_spent": 0.0,
+        "created_at": contact.created_at.isoformat(),
+    }
+
+
+@router.post("/customers/import")
+async def import_customers(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    content = await file.read()
+    text = content.decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(text))
+    created = 0
+    skipped = 0
+    errors: list[str] = []
+    for row in reader:
+        phone = (row.get("phone") or row.get("telefone") or "").strip()
+        if not phone:
+            skipped += 1
+            continue
+        existing = await db.scalar(select(Contact).where(Contact.phone == phone))
+        if existing:
+            skipped += 1
+            continue
+        seg_raw = (row.get("segment") or row.get("segmento") or "regular").strip().lower()
+        try:
+            seg = ContactSegment(seg_raw)
+        except ValueError:
+            seg = ContactSegment.regular
+        contact = Contact(
+            phone=phone,
+            name=(row.get("name") or row.get("nome") or "").strip() or None,
+            email=(row.get("email") or "").strip() or None,
+            address=(row.get("address") or row.get("morada") or "").strip() or None,
+            segment=seg,
+            internal_notes=(row.get("notes") or row.get("notas") or "").strip() or None,
+        )
+        db.add(contact)
+        created += 1
+    await db.commit()
+    return {"created": created, "skipped": skipped, "errors": errors}
 
 
 @router.put("/customers/{customer_id}")

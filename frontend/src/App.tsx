@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Conversation } from "./types";
-import { fetchConversations } from "./api";
+import { fetchConversations, openGlobalWebSocket } from "./api";
+import type { GlobalWsEvent } from "./api";
 import { ConversationList } from "./components/ConversationList";
 import { ChatWindow } from "./components/ChatWindow";
 import { DashboardPage } from "./components/DashboardPage";
@@ -26,34 +27,102 @@ const NAV: { key: Section; label: string; icon: string }[] = [
   { key: "bot", label: "Bot IA", icon: "🤖" },
 ];
 
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {
+    // browser sem suporte a AudioContext
+  }
+}
+
 export default function App() {
   const [section, setSection] = useState<Section>("dashboard");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [unread, setUnread] = useState<Record<number, number>>({});
+  const selectedIdRef = useRef<number | null>(null);
+  selectedIdRef.current = selectedId;
 
   useEffect(() => {
     fetchConversations().then(setConversations).catch(console.error);
   }, []);
 
+  const handleGlobalEvent = useCallback((evt: GlobalWsEvent) => {
+    if (evt.type !== "new_message") return;
+    const { conversation_id, contact, controlled_by, preview } = evt;
+
+    setConversations(prev => {
+      const existing = prev.find(c => c.id === conversation_id);
+      const updated: Conversation = existing
+        ? { ...existing, contact: { ...existing.contact, ...contact }, controlled_by }
+        : {
+            id: conversation_id,
+            contact: { id: contact.id, phone: contact.phone, name: contact.name },
+            controlled_by,
+            window_open: true,
+            updated_at: new Date().toISOString(),
+          };
+      const without = prev.filter(c => c.id !== conversation_id);
+      return [updated, ...without];
+    });
+
+    if (evt.direction === "inbound" && selectedIdRef.current !== conversation_id) {
+      setUnread(prev => ({ ...prev, [conversation_id]: (prev[conversation_id] ?? 0) + 1 }));
+      playBeep();
+    }
+
+    // suppress unused warning
+    void preview;
+  }, []);
+
+  useEffect(() => {
+    const ws = openGlobalWebSocket(handleGlobalEvent);
+    return () => ws.close();
+  }, [handleGlobalEvent]);
+
+  function selectConversation(id: number) {
+    setSelectedId(id);
+    setUnread(prev => ({ ...prev, [id]: 0 }));
+    if (section !== "chat") setSection("chat");
+  }
+
   const selected = conversations.find((c) => c.id === selectedId) ?? null;
+  const totalUnread = Object.values(unread).reduce((s, n) => s + n, 0);
 
   return (
     <div className="flex h-screen font-sans text-gray-900">
       {/* Sidebar */}
       <nav className="w-16 bg-gray-900 flex flex-col items-center py-3 gap-0.5 shrink-0 overflow-y-auto">
-        {NAV.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => setSection(item.key)}
-            title={item.label}
-            className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
-              section === item.key ? "bg-gray-700 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
-            }`}
-          >
-            <span className="text-lg leading-none">{item.icon}</span>
-            <span className="leading-none" style={{ fontSize: "9px" }}>{item.label}</span>
-          </button>
-        ))}
+        {NAV.map((item) => {
+          const badgeCount = item.key === "chat" ? totalUnread : 0;
+          return (
+            <button
+              key={item.key}
+              onClick={() => setSection(item.key)}
+              title={item.label}
+              className={`relative w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors ${
+                section === item.key ? "bg-gray-700 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-white"
+              }`}
+            >
+              <span className="text-lg leading-none">{item.icon}</span>
+              <span className="leading-none" style={{ fontSize: "9px" }}>{item.label}</span>
+              {badgeCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {badgeCount > 99 ? "99+" : badgeCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       {/* Conteúdo */}
@@ -62,7 +131,8 @@ export default function App() {
           <ConversationList
             conversations={conversations}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={selectConversation}
+            unread={unread}
           />
           <main className="flex-1 flex flex-col">
             {selected ? (

@@ -117,9 +117,24 @@ async def _handle_messages(
         await db.refresh(message)
         logger.info("Mensagem recebida: %s de %s", wa_id, phone)
 
+        # Notifica clientes globais (lista de conversas em tempo real)
+        from app.websocket.manager import manager
+        await manager.broadcast_global({
+            "type": "new_message",
+            "conversation_id": conversation.id,
+            "contact": {"id": contact.id, "phone": contact.phone, "name": contact.name},
+            "controlled_by": conversation.controlled_by.value,
+            "preview": (content or "")[:60],
+            "direction": "inbound",
+        })
+
         # Dispara download assíncrono para tipos de média
         if msg_type != MessageType.text and content and mime_type:
-            asyncio.create_task(_download_and_store(message.id, content, mime_type))
+            asyncio.create_task(_download_and_store(
+                message.id, content, mime_type,
+                conversation.id, contact.id,
+                conversation.controlled_by.value == "bot",
+            ))
 
         # Bot de resposta automática (apenas mensagens de texto)
         if msg_type == MessageType.text and conversation.controlled_by.value == "bot":
@@ -260,15 +275,36 @@ async def _bot_auto_reply(conversation_id: int, contact_id: int) -> None:
         logger.error("Erro no bot auto-reply: %s", exc)
 
 
-async def _download_and_store(message_id: int, media_id: str, mime_type: str) -> None:
-    """Baixa a mídia e actualiza o campo media_path na mensagem."""
+async def _download_and_store(
+    message_id: int,
+    media_id: str,
+    mime_type: str,
+    conversation_id: int = 0,
+    contact_id: int = 0,
+    bot_mode: bool = False,
+) -> None:
+    """Baixa a mídia, transcreve áudio (Groq) e actualiza a mensagem."""
     try:
         relative_path = await download_media(media_id, mime_type)
+
+        transcription: str | None = None
+        if mime_type.startswith("audio/") and conversation_id:
+            from pathlib import Path
+            from app.config import settings
+            from app.services.transcribe import transcribe_audio
+            full_path = Path(settings.media_storage_path) / relative_path
+            transcription = await transcribe_audio(str(full_path))
+
         async with AsyncSessionLocal() as session:
             msg = await session.get(Message, message_id)
             if msg:
                 msg.media_path = relative_path
+                if transcription:
+                    msg.content = transcription
                 await session.commit()
                 logger.info("media_path actualizado: %s", relative_path)
+
+        if transcription and bot_mode and conversation_id and contact_id:
+            asyncio.create_task(_bot_auto_reply(conversation_id, contact_id))
     except Exception as exc:
         logger.error("Erro ao baixar média %s: %s", media_id, exc)

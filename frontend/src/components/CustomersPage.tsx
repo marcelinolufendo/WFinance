@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Customer } from "../types";
-import { fetchCustomers, updateCustomer } from "../api";
+import { fetchCustomers, updateCustomer, createCustomer, importCustomersCSV } from "../api";
 
 const SEGMENT_LABELS: Record<string, string> = { regular: "Regular", vip: "VIP", inactive: "Inativo", lead: "Lead" };
 const SEGMENT_COLORS: Record<string, string> = {
@@ -11,14 +11,19 @@ const SEGMENT_COLORS: Record<string, string> = {
 };
 
 type EditForm = { name: string; email: string; address: string; segment: string; internal_notes: string };
+type CreateForm = { phone: string; name: string; email: string; address: string; segment: string; internal_notes: string };
 
 export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState("");
   const [segmentFilter, setSegmentFilter] = useState("all");
   const [modal, setModal] = useState<{ open: boolean; customer: Customer | null }>({ open: false, customer: null });
+  const [createModal, setCreateModal] = useState(false);
   const [form, setForm] = useState<EditForm>({ name: "", email: "", address: "", segment: "regular", internal_notes: "" });
+  const [createForm, setCreateForm] = useState<CreateForm>({ phone: "", name: "", email: "", address: "", segment: "regular", internal_notes: "" });
   const [loading, setLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: number; skipped: number } | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -39,6 +44,32 @@ export function CustomersPage() {
     } finally { setLoading(false); }
   }
 
+  async function saveCreate() {
+    if (!createForm.phone.trim()) return;
+    setLoading(true);
+    try {
+      await createCustomer({ ...createForm, name: createForm.name || null, email: createForm.email || null, address: createForm.address || null, internal_notes: createForm.internal_notes || null });
+      setCreateModal(false);
+      setCreateForm({ phone: "", name: "", email: "", address: "", segment: "regular", internal_notes: "" });
+      await load();
+    } catch (err: any) {
+      alert(err.message);
+    } finally { setLoading(false); }
+  }
+
+  async function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await importCustomersCSV(file);
+      setImportResult(result);
+      await load();
+    } catch (err: any) {
+      alert(err.message);
+    }
+    if (csvInputRef.current) csvInputRef.current.value = "";
+  }
+
   const filtered = customers.filter(c => {
     const q = search.toLowerCase();
     const matchSearch = !q || (c.name ?? "").toLowerCase().includes(q) || c.phone.includes(q) || (c.email ?? "").toLowerCase().includes(q);
@@ -50,7 +81,7 @@ export function CustomersPage() {
     <div className="p-6 flex-1 overflow-auto">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-semibold">Clientes</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <input className="input text-sm w-48" placeholder="Pesquisar..." value={search} onChange={e => setSearch(e.target.value)} />
           <select className="input text-sm w-auto" value={segmentFilter} onChange={e => setSegmentFilter(e.target.value)}>
             <option value="all">Todos</option>
@@ -59,8 +90,17 @@ export function CustomersPage() {
             <option value="vip">VIP</option>
             <option value="inactive">Inativos</option>
           </select>
+          <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCSV} />
+          <button onClick={() => csvInputRef.current?.click()} className="px-3 py-1.5 border rounded text-sm hover:bg-gray-50">Importar CSV</button>
+          <button onClick={() => setCreateModal(true)} className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700">+ Novo</button>
         </div>
       </div>
+      {importResult && (
+        <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-700 flex items-center justify-between">
+          <span>Importação concluída: <strong>{importResult.created}</strong> criados, <strong>{importResult.skipped}</strong> ignorados.</span>
+          <button onClick={() => setImportResult(null)} className="text-green-500 hover:text-green-700 ml-4">✕</button>
+        </div>
+      )}
 
       <table className="w-full text-sm border-collapse">
         <thead>
@@ -127,6 +167,46 @@ export function CustomersPage() {
               <button onClick={() => setModal({ open: false, customer: null })} className="px-4 py-2 rounded border text-sm">Cancelar</button>
               <button onClick={save} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
                 {loading ? "A guardar…" : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {createModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Novo contacto</h2>
+            <div className="space-y-3">
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Telefone *</span>
+                <input className="input" placeholder="244912345678" value={createForm.phone} onChange={e => setCreateForm({ ...createForm, phone: e.target.value })} />
+              </label>
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Nome</span>
+                <input className="input" value={createForm.name} onChange={e => setCreateForm({ ...createForm, name: e.target.value })} />
+              </label>
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Email</span>
+                <input type="email" className="input" value={createForm.email} onChange={e => setCreateForm({ ...createForm, email: e.target.value })} />
+              </label>
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Morada</span>
+                <textarea className="input" rows={2} value={createForm.address} onChange={e => setCreateForm({ ...createForm, address: e.target.value })} />
+              </label>
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Segmento</span>
+                <select className="input" value={createForm.segment} onChange={e => setCreateForm({ ...createForm, segment: e.target.value })}>
+                  <option value="lead">Lead</option>
+                  <option value="regular">Regular</option>
+                  <option value="vip">VIP</option>
+                  <option value="inactive">Inativo</option>
+                </select>
+              </label>
+              <label className="block"><span className="text-xs font-medium text-gray-600 mb-1 block">Notas internas</span>
+                <textarea className="input" rows={2} placeholder="Apenas visível pela equipa..." value={createForm.internal_notes} onChange={e => setCreateForm({ ...createForm, internal_notes: e.target.value })} />
+              </label>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Para CSV: colunas <code>phone,name,email,address,segment,notes</code></p>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setCreateModal(false)} className="px-4 py-2 rounded border text-sm">Cancelar</button>
+              <button onClick={saveCreate} disabled={loading || !createForm.phone.trim()} className="bg-blue-600 text-white px-4 py-2 rounded text-sm disabled:opacity-50">
+                {loading ? "A criar…" : "Criar"}
               </button>
             </div>
           </div>

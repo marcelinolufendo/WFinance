@@ -179,14 +179,28 @@ async def _knowledge_text(db: AsyncSession) -> str:
 
 
 def _build_messages(history: list[dict]) -> list[dict]:
-    tail = [m for m in history[-_MAX_HISTORY:] if m.get("type") == "text" and m.get("content")]
+    def _usable(m: dict) -> bool:
+        content = m.get("content") or ""
+        if not content:
+            return False
+        if m.get("type") == "text":
+            return True
+        if m.get("type") == "audio":
+            # Inclui apenas se o content é transcrição (não ID numérico do WhatsApp)
+            return not content.strip().isdigit()
+        return False
+
+    tail = [m for m in history[-_MAX_HISTORY:] if _usable(m)]
     merged: list[dict] = []
     for msg in tail:
         role = "user" if msg["direction"] == "inbound" else "assistant"
+        content = msg["content"]
+        if msg.get("type") == "audio":
+            content = f"[áudio transcrito] {content}"
         if merged and merged[-1]["role"] == role:
-            merged[-1]["content"] += "\n" + msg["content"]
+            merged[-1]["content"] += "\n" + content
         else:
-            merged.append({"role": role, "content": msg["content"]})
+            merged.append({"role": role, "content": content})
     if not merged or merged[-1]["role"] != "user":
         return []
     return merged
