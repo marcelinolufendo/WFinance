@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Conversation, Message, OrderPayload } from "../types";
-import { fetchMessages, sendMessage, openWebSocket, suggestReply, createOrder } from "../api";
+import { fetchMessages, sendMessage, openWebSocket, suggestReply, createOrder, toggleConversationMode } from "../api";
 import { MediaMessage } from "./MediaMessage";
 
 interface Props {
   conversation: Conversation;
+  onModeChange?: (id: number, mode: string) => void;
 }
 
 const STATUS_ICON: Record<string, string> = {
@@ -14,17 +15,19 @@ const STATUS_ICON: Record<string, string> = {
   failed: "✗",
 };
 
-export function ChatWindow({ conversation }: Props) {
+export function ChatWindow({ conversation, onModeChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [mode, setMode] = useState(conversation.controlled_by);
   const [orderModal, setOrderModal] = useState(false);
   const [orderItems, setOrderItems] = useState([{ name: "", quantity: 1, unit_price: 0 }]);
   const [orderNotes, setOrderNotes] = useState("");
   const [orderSaving, setOrderSaving] = useState(false);
+  const [toggling, setToggling] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,6 +77,15 @@ export function ChatWindow({ conversation }: Props) {
     }
   }
 
+  async function handleToggleMode() {
+    setToggling(true);
+    try {
+      const r = await toggleConversationMode(conversation.id);
+      setMode(r.controlled_by);
+      onModeChange?.(conversation.id, r.controlled_by);
+    } finally { setToggling(false); }
+  }
+
   async function handleCreateOrder() {
     setOrderSaving(true);
     try {
@@ -109,10 +121,18 @@ export function ChatWindow({ conversation }: Props) {
           <p className="font-semibold">{conversation.contact.name ?? conversation.contact.phone}</p>
           <p className="text-xs text-gray-400">{conversation.contact.phone}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <span className={`text-xs px-2 py-1 rounded-full ${conversation.window_open ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
             {conversation.window_open ? "Janela aberta" : "Janela encerrada"}
           </span>
+          <button
+            onClick={handleToggleMode}
+            disabled={toggling}
+            title={mode === "bot" ? "Clica para passar para modo humano" : "Clica para activar o bot"}
+            className={`text-xs px-2 py-1 rounded-full font-medium transition-colors disabled:opacity-50 ${mode === "bot" ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+          >
+            {toggling ? "…" : mode === "bot" ? "🤖 Bot activo" : "👤 Humano"}
+          </button>
           <button onClick={() => setOrderModal(true)} className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full hover:bg-amber-200 font-medium">
             🛒 Encomenda
           </button>

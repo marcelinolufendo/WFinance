@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Conversation, Message, Direction, MessageType, MessageStatus
+from app.models import Conversation, Message, Direction, MessageType, MessageStatus, ControlledBy
 from app.models.contact import Contact
 from app.services import whatsapp
 
@@ -77,6 +77,16 @@ async def send_message(
     await db.commit()
     await db.refresh(message)
     return {"id": message.id, "wa_message_id": wa_id}
+
+
+@router.patch("/{conversation_id}/mode")
+async def set_mode(conversation_id: int, db: AsyncSession = Depends(get_db)):
+    conv = await db.get(Conversation, conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversa não encontrada")
+    conv.controlled_by = ControlledBy.bot if conv.controlled_by == ControlledBy.human else ControlledBy.human
+    await db.commit()
+    return {"controlled_by": conv.controlled_by.value}
 
 
 @router.get("/{conversation_id}/messages")

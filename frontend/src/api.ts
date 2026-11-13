@@ -38,6 +38,12 @@ export async function suggestReply(conversationId: number): Promise<string> {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
+export async function toggleConversationMode(id: number): Promise<{ controlled_by: string }> {
+  const r = await fetch(`${BASE}/conversations/${id}/mode`, { method: "PATCH" });
+  if (!r.ok) throw new Error("Erro ao mudar modo");
+  return r.json();
+}
+
 export async function fetchDashboard(): Promise<DashboardData> {
   const r = await fetch(`${BASE}/dashboard`);
   if (!r.ok) throw new Error("Erro ao carregar dashboard");
