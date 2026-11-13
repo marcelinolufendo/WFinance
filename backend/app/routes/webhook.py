@@ -4,12 +4,12 @@ import hmac
 import logging
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import settings
-from app.database import get_db, AsyncSessionLocal
+from app.database import AsyncSessionLocal
 from app.models import Contact, Conversation, Message, Direction, MessageType, MessageStatus
 from app.services.media import download_media
 
@@ -57,13 +57,12 @@ async def verify_webhook(
 async def receive_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
 ):
     body = await request.body()
     _verify_signature(body, request.headers.get("X-Hub-Signature-256"))
 
     payload: dict[str, Any] = await request.json()
-    background_tasks.add_task(_process_payload, payload, db)
+    background_tasks.add_task(_process_payload, payload)
     return {"status": "ok"}
 
 
@@ -71,12 +70,13 @@ async def receive_webhook(
 # Processamento em background
 # ---------------------------------------------------------------------------
 
-async def _process_payload(payload: dict, db: AsyncSession) -> None:
-    for entry in payload.get("entry", []):
-        for change in entry.get("changes", []):
-            value = change.get("value", {})
-            await _handle_messages(value.get("messages", []), value.get("contacts", []), db)
-            await _handle_statuses(value.get("statuses", []), db)
+async def _process_payload(payload: dict) -> None:
+    async with AsyncSessionLocal() as db:
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                await _handle_messages(value.get("messages", []), value.get("contacts", []), db)
+                await _handle_statuses(value.get("statuses", []), db)
 
 
 async def _handle_messages(
