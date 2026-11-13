@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Order, Customer, Product, Service } from "../types";
+import type { Order, OrderPayload, Customer, Product, Service } from "../types";
 import { fetchOrders, createOrder, updateOrder, deleteOrder, fetchCustomers, fetchProducts, fetchServices } from "../api";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -77,7 +77,7 @@ export function OrdersPage() {
   async function save() {
     setLoading(true);
     try {
-      const payload = { contact_id: form.contact_id, status: form.status as any, payment_method: form.payment_method as any, payment_status: form.payment_status as any, notes: form.notes || null, items: form.items, total_amount: calcTotal() || null };
+      const payload: OrderPayload = { contact_id: form.contact_id, status: form.status as OrderPayload["status"], payment_method: form.payment_method as OrderPayload["payment_method"], payment_status: form.payment_status as OrderPayload["payment_status"], notes: form.notes || null, items: form.items, total_amount: calcTotal() || null };
       if (modal.editing) await updateOrder(modal.editing.id, payload);
       else await createOrder(payload);
       setModal({ open: false, editing: null });

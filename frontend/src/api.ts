@@ -1,4 +1,4 @@
-import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, Delivery, Customer } from "./types";
+import type { Conversation, Message, Product, Service, Campaign, DashboardData, Order, OrderPayload, Delivery, Customer } from "./types";
 
 const BASE = "/api";
 
@@ -52,13 +52,13 @@ export async function fetchOrders(): Promise<Order[]> {
   return r.json();
 }
 
-export async function createOrder(data: Omit<Order, "id" | "created_at" | "updated_at" | "delivery">): Promise<Order> {
+export async function createOrder(data: OrderPayload): Promise<Order> {
   const r = await fetch(`${BASE}/orders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   if (!r.ok) throw new Error("Erro ao criar encomenda");
   return r.json();
 }
 
-export async function updateOrder(id: number, data: Omit<Order, "id" | "created_at" | "updated_at" | "delivery">): Promise<Order> {
+export async function updateOrder(id: number, data: OrderPayload): Promise<Order> {
   const r = await fetch(`${BASE}/orders/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   if (!r.ok) throw new Error("Erro ao atualizar encomenda");
   return r.json();

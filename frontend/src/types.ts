@@ -65,6 +65,17 @@ export interface Order {
   updated_at: string;
 }
 
+export interface OrderPayload {
+  contact_id: number;
+  conversation_id?: number | null;
+  status: Order["status"];
+  payment_method: Order["payment_method"];
+  payment_status: Order["payment_status"];
+  items: OrderItem[];
+  total_amount?: number | null;
+  notes?: string | null;
+}
+
 export interface Delivery {
   id: number;
   order_id: number;
