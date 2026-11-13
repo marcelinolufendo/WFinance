@@ -38,7 +38,7 @@ export async function suggestReply(conversationId: number): Promise<string> {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
-export async function toggleConversationMode(id: number): Promise<{ controlled_by: string }> {
+export async function toggleConversationMode(id: number): Promise<{ controlled_by: "human" | "bot" }> {
   const r = await fetch(`${BASE}/conversations/${id}/mode`, { method: "PATCH" });
   if (!r.ok) throw new Error("Erro ao mudar modo");
   return r.json();
