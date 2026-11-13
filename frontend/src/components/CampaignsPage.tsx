@@ -46,6 +46,10 @@ export function CampaignsPage() {
       status: c.status,
       starts_at: c.starts_at ? c.starts_at.slice(0, 16) : null,
       ends_at: c.ends_at ? c.ends_at.slice(0, 16) : null,
+      template_name: c.template_name,
+      template_language: c.template_language ?? "pt_BR",
+      sent_count: c.sent_count,
+      target_segment: c.target_segment,
     });
     setModal({ open: true, editing: c });
   }
